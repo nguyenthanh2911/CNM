@@ -721,34 +721,13 @@ Raw Data (MIMIC-IV / eICU / Synthetic)
 
 ### Kết quả mô hình (test set — MIMIC-IV)
 
-| Mô hình | AUROC | Sensitivity | Specificity | F1 |
-|---------|-------|-------------|-------------|-----|
-| Logistic (baseline) | 0.812 | 72.1% | 76.3% | 0.68 |
-| XGBoost | 0.901 | 83.2% | 77.8% | 0.74 |
-| LSTM | 0.889 | 81.5% | 79.1% | 0.73 |
-| **Ensemble (final)** | **0.934** | **87.3%** | **78.6%** | **0.79** |
+
 
 ### Kết quả hệ thống (load test — 50 bệnh nhân đồng thời)
 
-| Chỉ số | Kết quả | Mục tiêu |
-|--------|---------|----------|
-| Latency trung bình (P50) | 1.2 giây | < 2 giây ✅ |
-| Latency P95 | 1.8 giây | < 2 giây ✅ |
-| Alert lead time | 4.2 giờ | > 3 giờ ✅ |
-| False positive rate | 12.4% | < 15% ✅ |
-| Throughput | 95 req/min | > 60 req/min ✅ |
+
 
 ### Hạn chế & Hướng phát triển
 
-**Hạn chế hiện tại:**
-- False positive 12.4% có thể gây "alert fatigue" — y tá quen với cảnh báo nhiều
-- LSTM cần ≥ 4h dữ liệu để hoạt động tốt, không áp dụng được cho bệnh nhân mới nhập
-- Chưa tích hợp dữ liệu vi sinh (culture results) làm tăng specificity
-
-**Hướng mở rộng:**
-- Cá nhân hóa ngưỡng cảnh báo theo từng bệnh nhân (personalized threshold)
-- Thêm mô hình Transformer (TFT — Temporal Fusion Transformer)
-- Federated Learning: train trên nhiều bệnh viện, không chia sẻ dữ liệu thô
-- Tích hợp HL7 FHIR để kết nối HIS/EMR bệnh viện thực
 
 ---
