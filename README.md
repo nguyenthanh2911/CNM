@@ -5,7 +5,7 @@
 
 ---
 
-## 📋 Mục lục
+##  Mục lục
 
 1. [Giới thiệu đề tài](#1-giới-thiệu-đề-tài)
 2. [Kiến trúc hệ thống](#2-kiến-trúc-hệ-thống)
@@ -17,7 +17,6 @@
 8. [Quy trình ML Pipeline](#8-quy-trình-ml-pipeline)
 9. [API Reference](#9-api-reference)
 10. [Kết quả và đánh giá](#10-kết-quả-và-đánh-giá)
-11. [Nhóm thực hiện](#11-nhóm-thực-hiện)
 
 ---
 
