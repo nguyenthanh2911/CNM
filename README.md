@@ -119,13 +119,12 @@ icu-sepsis-warning/
 │   ├── api_spec.yaml                # OpenAPI 3.0 spec cho FastAPI
 │   ├── database_schema.sql          # Schema PostgreSQL + TimescaleDB
 │   ├── diagrams/                    # Các sơ đồ UML
-│   │   ├── usecase.png              # Biểu đồ Usecase
-│   │   ├── activity.png             # Biểu đồ hoạt động
-│   │   ├── sequence.png             # Biểu đồ trình tự
-│   │   ├── class_diagram.png        # Class diagram
-│   │   └── erd.png                  # Entity Relationship Diagram
-│   └── report/                      # Báo cáo đồ án
-│       └── final_report.pdf
+│       ├── usecase.png              # Biểu đồ Usecase
+│       ├── activity.png             # Biểu đồ hoạt động
+│       ├── sequence.png             # Biểu đồ trình tự
+│       ├── class_diagram.png        # Class diagram
+│       └── erd.png                  # Entity Relationship Diagram
+│   
 │
 ├── data/                            # Dữ liệu (không commit lên Git)
 │   ├── raw/                         # Dữ liệu thô từ MIMIC-IV / eICU
@@ -367,50 +366,50 @@ icu-sepsis-warning/
 
 | Công nghệ | Phiên bản | Mục đích | Giấy phép |
 |-----------|-----------|----------|-----------|
-| **TimescaleDB** | 2.x | Lưu time-series vitals (extension PostgreSQL) | Apache 2.0 ✅ |
-| **PostgreSQL** | 15+ | DB chính: bệnh nhân, user, alert | PostgreSQL License ✅ |
-| **Redis** | 7.x | Cache feature vectors, session, pub/sub | BSD ✅ |
-| **Apache Kafka** | 3.x | Message streaming từ thiết bị → ML service | Apache 2.0 ✅ |
-| **DuckDB** | 0.10+ | Xử lý phân tích parquet nhanh (ETL) | MIT ✅ |
-| **Apache Parquet** | — | Format lưu trữ features đã xử lý | Apache 2.0 ✅ |
+| **TimescaleDB** | 2.x | Lưu time-series vitals (extension PostgreSQL) | Apache 2.0  |
+| **PostgreSQL** | 15+ | DB chính: bệnh nhân, user, alert | PostgreSQL License  |
+| **Redis** | 7.x | Cache feature vectors, session, pub/sub | BSD  |
+| **Apache Kafka** | 3.x | Message streaming từ thiết bị → ML service | Apache 2.0  |
+| **DuckDB** | 0.10+ | Xử lý phân tích parquet nhanh (ETL) | MIT  |
+| **Apache Parquet** | — | Format lưu trữ features đã xử lý | Apache 2.0  |
 
 ### 4.2 Machine Learning
 
 | Công nghệ | Phiên bản | Mục đích | Giấy phép |
 |-----------|-----------|----------|-----------|
-| **XGBoost** | 2.x | Tabular classifier chính | Apache 2.0 ✅ |
-| **PyTorch** | 2.x | LSTM time-series model | BSD ✅ |
-| **scikit-learn** | 1.x | Preprocessing, Logistic baseline, metrics | BSD ✅ |
-| **imbalanced-learn** | 0.12+ | SMOTE-ENN xử lý mất cân bằng | MIT ✅ |
-| **SHAP** | 0.45+ | Explainability (TreeExplainer, DeepExplainer) | MIT ✅ |
-| **Optuna** | 3.x | Hyperparameter tuning tự động | MIT ✅ |
-| **MLflow** | 2.x | Experiment tracking + Model Registry | Apache 2.0 ✅ |
-| **Pandas / NumPy** | — | Xử lý dữ liệu | BSD ✅ |
+| **XGBoost** | 2.x | Tabular classifier chính | Apache 2.0  |
+| **PyTorch** | 2.x | LSTM time-series model | BSD  |
+| **scikit-learn** | 1.x | Preprocessing, Logistic baseline, metrics | BSD  |
+| **imbalanced-learn** | 0.12+ | SMOTE-ENN xử lý mất cân bằng | MIT  |
+| **SHAP** | 0.45+ | Explainability (TreeExplainer, DeepExplainer) | MIT  |
+| **Optuna** | 3.x | Hyperparameter tuning tự động | MIT  |
+| **MLflow** | 2.x | Experiment tracking + Model Registry | Apache 2.0  |
+| **Pandas / NumPy** | — | Xử lý dữ liệu | BSD  |
 
 ### 4.3 Backend & API
 
 | Công nghệ | Phiên bản | Mục đích | Giấy phép |
 |-----------|-----------|----------|-----------|
-| **FastAPI** | 0.111+ | REST API cho ML inference & alert service | MIT ✅ |
-| **Django** | 5.x | Web application, dashboard, admin | BSD ✅ |
-| **Django Channels** | 4.x | WebSocket real-time push alert | BSD ✅ |
-| **Django REST Framework** | 3.x | API CRUD bệnh nhân, user | BSD ✅ |
-| **Celery** | 5.x | Async task (gửi email, xử lý batch) | BSD ✅ |
-| **Uvicorn** | 0.30+ | ASGI server cho FastAPI | BSD ✅ |
-| **Pydantic** | 2.x | Data validation (schema request/response) | MIT ✅ |
+| **FastAPI** | 0.111+ | REST API cho ML inference & alert service | MIT  |
+| **Django** | 5.x | Web application, dashboard, admin | BSD  |
+| **Django Channels** | 4.x | WebSocket real-time push alert | BSD  |
+| **Django REST Framework** | 3.x | API CRUD bệnh nhân, user | BSD  |
+| **Celery** | 5.x | Async task (gửi email, xử lý batch) | BSD  |
+| **Uvicorn** | 0.30+ | ASGI server cho FastAPI | BSD  |
+| **Pydantic** | 2.x | Data validation (schema request/response) | MIT  |
 
 ### 4.4 DevOps & Monitoring
 
 | Công nghệ | Phiên bản | Mục đích | Giấy phép |
 |-----------|-----------|----------|-----------|
-| **Docker** + **Docker Compose** | 24+ | Container hóa, deploy local | Apache 2.0 ✅ |
-| **GitHub Actions** | — | CI/CD tự động (test + build) | Free tier ✅ |
-| **Prometheus** | 2.x | Thu thập metrics hệ thống | Apache 2.0 ✅ |
-| **Grafana** | 10.x | Dashboard metrics, alerting | AGPL ✅ |
-| **Evidently AI** | 0.4+ | Phát hiện data drift / model drift | Apache 2.0 ✅ |
-| **Prefect** | 3.x | Orchestrate retrain pipeline | Apache 2.0 ✅ |
-| **pytest** | 8.x | Unit test, integration test | MIT ✅ |
-| **Locust** | 2.x | Load testing | MIT ✅ |
+| **Docker** + **Docker Compose** | 24+ | Container hóa, deploy local | Apache 2.0  |
+| **GitHub Actions** | — | CI/CD tự động (test + build) | Free tier  |
+| **Prometheus** | 2.x | Thu thập metrics hệ thống | Apache 2.0  |
+| **Grafana** | 10.x | Dashboard metrics, alerting | AGPL  |
+| **Evidently AI** | 0.4+ | Phát hiện data drift / model drift | Apache 2.0  |
+| **Prefect** | 3.x | Orchestrate retrain pipeline | Apache 2.0  |
+| **pytest** | 8.x | Unit test, integration test | MIT  |
+| **Locust** | 2.x | Load testing | MIT  |
 
 ### 4.5 Dữ liệu
 
