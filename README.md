@@ -1,4 +1,4 @@
-# 🏥 ICU Sepsis Early Warning System
+#  ICU Sepsis Early Warning System
 
 > Hệ thống theo dõi ICU real-time sử dụng Machine Learning nhằm cảnh báo sớm Sepsis  
 > Đồ án môn học | Khoa Công nghệ Thông tin
@@ -106,7 +106,7 @@ FastAPI ML Service
 ## 3. Cấu trúc thư mục
 
 ```
-icu-sepsis-warning/
+CNM/
 │
 ├── README.md                        # File này — tổng quan toàn bộ dự án
 ├── docker-compose.yml               # Khởi động toàn bộ hệ thống 1 lệnh
