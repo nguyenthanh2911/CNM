@@ -497,8 +497,8 @@ python data_pipeline/data_generator.py \
 ### Bước 1 — Clone và cấu hình
 
 ```bash
-git clone https://github.com/<your-username>/icu-sepsis-warning.git
-cd icu-sepsis-warning
+git clone https://github.com/<your-username>/CNM.git
+cd CNM
 
 # Sao chép file biến môi trường
 cp .env.example .env
