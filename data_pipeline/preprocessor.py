@@ -65,6 +65,17 @@ class ICUPreprocessor:
     )
 
     scaler: Optional[StandardScaler] = None
+    scaler_columns: Optional[List[str]] = None
+
+    def _get_scaler_columns(self, df: pd.DataFrame) -> List[str]:
+        present_vitals = [c for c in self.vital_columns if c in df.columns]
+        if present_vitals:
+            return present_vitals
+
+        # Fallback: scale all columns derived from vitals (rolling features), e.g. heart_rate_mean_15m
+        prefixes = [f"{v}_" for v in self.vital_columns]
+        derived = [c for c in df.columns if any(c.startswith(p) for p in prefixes)]
+        return derived
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -111,11 +122,15 @@ class ICUPreprocessor:
             if mask.any() and not pd.isna(median):
                 df.loc[mask, col] = median
 
-        # 4) Fit StandardScaler on vital columns
-        present_vitals = [c for c in self.vital_columns if c in df.columns]
-        self.scaler = StandardScaler()
-        if present_vitals:
-            df[present_vitals] = self.scaler.fit_transform(df[present_vitals].astype(float))
+        # 4) Fit StandardScaler on vital columns (or derived vital features)
+        scale_cols = self._get_scaler_columns(df)
+        if scale_cols:
+            self.scaler = StandardScaler()
+            self.scaler_columns = list(scale_cols)
+            df[scale_cols] = self.scaler.fit_transform(df[scale_cols].astype(float))
+        else:
+            self.scaler = None
+            self.scaler_columns = None
 
         # 5) Return processed df
         return df
@@ -125,16 +140,23 @@ class ICUPreprocessor:
             raise ValueError("Scaler is not fitted. Call fit_transform() or load() first.")
 
         df = df.copy()
-        present_vitals = [c for c in self.vital_columns if c in df.columns]
-        if present_vitals:
-            df[present_vitals] = self.scaler.transform(df[present_vitals].astype(float))
+        scale_cols = list(self.scaler_columns or self._get_scaler_columns(df))
+        scale_cols = [c for c in scale_cols if c in df.columns]
+        if scale_cols:
+            df[scale_cols] = self.scaler.transform(df[scale_cols].astype(float))
         return df
 
     def save(self, path: str) -> None:
         if self.scaler is None:
             raise ValueError("Scaler is not fitted. Nothing to save.")
-        joblib.dump(self.scaler, path)
+        joblib.dump({"scaler": self.scaler, "scaler_columns": self.scaler_columns}, path)
 
     def load(self, path: str) -> "ICUPreprocessor":
-        self.scaler = joblib.load(path)
+        payload = joblib.load(path)
+        if isinstance(payload, dict) and "scaler" in payload:
+            self.scaler = payload.get("scaler")
+            self.scaler_columns = payload.get("scaler_columns")
+        else:
+            self.scaler = payload
+            self.scaler_columns = None
         return self
