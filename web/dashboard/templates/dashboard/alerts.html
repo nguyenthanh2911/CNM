@@ -1,0 +1,100 @@
+{% extends "dashboard/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Alerts</h3>
+  <div class="btn-group" role="group">
+    <a class="btn btn-outline-primary {% if status == 'all' %}active{% endif %}" href="/alerts/?status=all">Tất cả</a>
+    <a class="btn btn-outline-primary {% if status == 'pending' %}active{% endif %}" href="/alerts/?status=pending">Pending</a>
+    <a class="btn btn-outline-primary {% if status == 'confirmed' %}active{% endif %}" href="/alerts/?status=confirmed">Confirmed</a>
+  </div>
+</div>
+
+<div id="toastContainer" class="position-fixed top-0 end-0 p-3" style="z-index: 1080;"></div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Bệnh nhân</th>
+          <th>Thời gian</th>
+          <th>Severity</th>
+          <th>Trạng thái</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in alerts %}
+          <tr>
+            <td class="fw-semibold">{{ a.alert_id }}</td>
+            <td><a href="/patients/{{ a.patient_id }}/">{{ a.patient_id }}</a></td>
+            <td>{{ a.created_at }}</td>
+            <td>
+              {% if a.risk_level == 'CRITICAL' %}
+                <span class="badge bg-danger">CRITICAL</span>
+              {% elif a.risk_level == 'WARNING' %}
+                <span class="badge bg-warning text-dark">WARNING</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ a.risk_level }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if a.acknowledged %}
+                <span class="badge bg-success">Confirmed</span>
+              {% else %}
+                <span class="badge bg-secondary">Pending</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              {% if not a.acknowledged %}
+                <form method="post" action="/alerts/{{ a.alert_id }}/acknowledge/" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="ack_by" value="dashboard" />
+                  <button type="submit" class="btn btn-sm btn-outline-success">Confirm</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-center text-muted py-4">Chưa có alerts</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  function showToast(title, body) {
+    const container = document.getElementById('toastContainer');
+    const id = 't' + Math.random().toString(36).slice(2);
+    const html = `
+      <div id="${id}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+          <strong class="me-auto">${title}</strong>
+          <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body">${body}</div>
+      </div>
+    `;
+    container.insertAdjacentHTML('beforeend', html);
+    const toastEl = document.getElementById(id);
+    const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
+    toast.show();
+  }
+
+  const ws = new WebSocket('ws://localhost:8002/ws/all');
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'CRITICAL_ALERT') {
+        showToast('CRITICAL ALERT', `Patient ${msg.data.patient_id} risk=${msg.data.risk_score}`);
+        setTimeout(() => location.reload(), 700);
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+</script>
+{% endblock %}

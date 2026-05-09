@@ -1,0 +1,139 @@
+{% extends "dashboard/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3 class="mb-1">{{ patient_id }}</h3>
+    {% if risk_level == 'CRITICAL' %}
+      <span class="badge bg-danger">CRITICAL</span>
+    {% elif risk_level == 'WARNING' %}
+      <span class="badge bg-warning text-dark">WARNING</span>
+    {% else %}
+      <span class="badge bg-success">STABLE</span>
+    {% endif %}
+    <span class="ms-2 text-muted">Risk: <span class="fw-bold">{{ risk_score|floatformat:3 }}</span></span>
+  </div>
+
+  <div>
+    {% if pending_alert %}
+      <form method="post" action="/alerts/{{ pending_alert.alert_id }}/acknowledge/" class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="ack_by" value="dashboard" />
+        <button type="submit" class="btn btn-danger">Acknowledge</button>
+      </form>
+    {% endif %}
+    <a class="btn btn-outline-secondary" href="/">Back</a>
+  </div>
+</div>
+
+<div class="mb-3">
+  <span class="badge bg-secondary">SOFA: {{ sofa_score }}</span>
+  <span class="badge bg-secondary">NEWS2: {{ news2_score }}</span>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header">Risk score theo thời gian</div>
+      <div class="card-body">
+        <canvas id="riskChart" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header">Top 5 SHAP features</div>
+      <div class="card-body">
+        <canvas id="shapChart" height="160"></canvas>
+        {% if not shap_features %}
+          <div class="text-muted small mt-2">Chưa có dữ liệu SHAP</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-md-2">
+    <div class="card"><div class="card-body">
+      <div class="text-muted">HR</div>
+      <div class="fs-4 fw-bold">{{ vitals.heart_rate|default:"-" }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-2">
+    <div class="card"><div class="card-body">
+      <div class="text-muted">BP</div>
+      <div class="fs-6 fw-bold">{{ vitals.systolic_bp|default:"-" }} / {{ vitals.diastolic_bp|default:"-" }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-2">
+    <div class="card"><div class="card-body">
+      <div class="text-muted">SpO2</div>
+      <div class="fs-4 fw-bold">{{ vitals.spo2|default:"-" }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-2">
+    <div class="card"><div class="card-body">
+      <div class="text-muted">Temp</div>
+      <div class="fs-4 fw-bold">{{ vitals.temperature|default:"-" }}</div>
+    </div></div>
+  </div>
+  <div class="col-md-2">
+    <div class="card"><div class="card-body">
+      <div class="text-muted">RR</div>
+      <div class="fs-4 fw-bold">{{ vitals.respiratory_rate|default:"-" }}</div>
+    </div></div>
+  </div>
+</div>
+
+<script>
+  const riskSeries = {{ risk_series_json|safe }};
+  const labels = riskSeries.map(p => p.t);
+  const data = riskSeries.map(p => p.risk);
+
+  new Chart(document.getElementById('riskChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'risk_score',
+        data,
+        borderColor: '#0d6efd',
+        backgroundColor: 'rgba(13,110,253,0.1)',
+        tension: 0.2,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { min: 0, max: 1 }
+      }
+    }
+  });
+
+  const shap = {{ shap_features_json|safe }};
+  const shapLabels = shap.map(x => x.feature);
+  const shapValues = shap.map(x => x.shap_value);
+
+  new Chart(document.getElementById('shapChart'), {
+    type: 'bar',
+    data: {
+      labels: shapLabels,
+      datasets: [{
+        label: 'shap_value',
+        data: shapValues,
+        backgroundColor: 'rgba(220,53,69,0.35)'
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+</script>
+{% endblock %}
