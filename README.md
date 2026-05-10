@@ -264,7 +264,7 @@ Sử dụng **Sepsis-3 criteria**: bệnh nhân được gán nhãn `sepsis=1` k
 ### Bước 1 — Clone và cấu hình môi trường
 
 ```bash
-git clone https://github.com/<your-org>/CNM.git
+git clone https://github.com/nguyenthanh2911/CNM.git
 cd CNM
 
 cp .env.example .env
