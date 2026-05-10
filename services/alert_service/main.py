@@ -57,6 +57,11 @@ app = FastAPI(title="CNM Alert Service")
 manager = ConnectionManager()
 
 
+@app.get("/health")
+async def health() -> Dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
