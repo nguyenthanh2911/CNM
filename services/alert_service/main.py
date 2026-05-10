@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from prometheus_client import Gauge, generate_latest
+from starlette.responses import Response
 from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
@@ -56,10 +58,25 @@ SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 app = FastAPI(title="CNM Alert Service")
 manager = ConnectionManager()
 
+active_alerts_gauge = Gauge("active_alerts", "Number of active (unacknowledged) alerts")
+
 
 @app.get("/health")
 async def health() -> Dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+async def metrics() -> Response:
+    # Update active alerts gauge on scrape (cheap query, default scrape_interval is 15s)
+    db: Session = SessionLocal()
+    try:
+        active = int(db.query(func.count(AlertORM.id)).filter(AlertORM.acknowledged.is_(False)).scalar() or 0)
+        active_alerts_gauge.set(active)
+    finally:
+        db.close()
+
+    return Response(content=generate_latest(), media_type="text/plain; version=0.0.4; charset=utf-8")
 
 
 @app.on_event("startup")

@@ -2,6 +2,11 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: "app"
+  - job_name: 'ml_service'
     static_configs:
-      - targets: ["localhost:8001"]
+      - targets: ['ml_service:8001']
+    metrics_path: '/metrics'
+    
+  - job_name: 'alert_service'  
+    static_configs:
+      - targets: ['alert_service:8002']

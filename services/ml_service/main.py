@@ -18,6 +18,11 @@ from .schemas import HealthResponse, PredictionResponse, VitalRequest
 
 
 predictions_total = Counter("predictions_total", "Total number of predictions")
+predictions_by_risk_total = Counter(
+    "predictions_by_risk_total",
+    "Total number of predictions by risk level",
+    ["risk_level"],
+)
 inference_seconds = Histogram("inference_seconds", "Inference request latency in seconds")
 
 Base = declarative_base()
@@ -106,6 +111,7 @@ async def post_vitals(payload: VitalRequest) -> PredictionResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
     predictions_total.inc()
+    predictions_by_risk_total.labels(risk_level=str(result.risk_level)).inc()
 
     # persist to DB
     now = datetime.now(timezone.utc)
