@@ -44,13 +44,13 @@ if __name__ == "__main__":
 
     df = pd.read_csv(args.data)
 
-    # 3) Feature building
-    builder = FeatureBuilder()
-    df_feat = builder.build(df)
-
-    # 4) Preprocess (scaling vital-derived features)
+    # 3) Preprocess (imputation, scaling)
     pre = ICUPreprocessor()
-    df_feat = pre.fit_transform(df_feat)
+    df_clean = pre.fit_transform(df)
+
+    # 4) Feature building
+    builder = FeatureBuilder()
+    df_feat = builder.build(df_clean)
 
     # 5) Chronological split
     time_col = builder.time_col

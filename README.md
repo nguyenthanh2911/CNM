@@ -309,29 +309,37 @@ Services sẽ chạy tại:
 
 ### Bước 3 — Khởi tạo database
 
+Linux / macOS:
 ```bash
-bash scripts/setup_db.sh
-python scripts/seed_patients.py
+# Khởi tạo bảng trong database
+cat docs/database_schema.sql | docker compose exec -T postgres psql -U sepsis_user -d sepsis_db
+
+# Seed dữ liệu bệnh nhân ban đầu (chạy bên trong container)
+docker compose exec -T ml_service python scripts/seed_patients.py
 ```
 
 Windows (PowerShell):
-
 ```powershell
-./scripts/setup_db.ps1
-python scripts/seed_patients.py
+# Khởi tạo bảng trong database
+Get-Content docs\database_schema.sql | docker compose exec -T postgres psql -U sepsis_user -d sepsis_db
+
+# Seed dữ liệu bệnh nhân ban đầu
+docker compose exec -T ml_service python scripts/seed_patients.py
 ```
 
 ### Bước 4 — Chạy demo với Synthetic Data
 
+Để tránh lỗi môi trường Python trên máy cá nhân, toàn bộ các lệnh nên được chạy thông qua container `ml_service`:
+
 ```bash
-# Sinh dữ liệu synthetic
-python data_pipeline/data_generator.py --mode csv --patients 20 --hours 24
+# Sinh dữ liệu synthetic (chạy trong container)
+docker compose exec -e PYTHONPATH=/app -T ml_service python data_pipeline/data_generator.py --mode csv --patients 20 --hours 24
 
-# Train model
-python ml/train.py --data data/synthetic/icu_data_synthetic.csv
+# Train model và đăng ký lên MLflow
+docker compose exec -e PYTHONPATH=/app -T ml_service python ml/train.py --data data/synthetic/icu_data_synthetic.csv
 
-# Stream dữ liệu vào hệ thống (mỗi 5 phút 1 lần)
-python data_pipeline/data_generator.py --mode stream --interval 300
+# Stream dữ liệu vào hệ thống (chạy ngầm mỗi 30 giây để test)
+docker compose exec -e PYTHONPATH=/app -d ml_service python data_pipeline/data_generator.py --mode stream --interval 30
 
 # Mở dashboard: http://localhost:8000
 ```
@@ -340,28 +348,28 @@ python data_pipeline/data_generator.py --mode stream --interval 300
 
 ## 7. Hướng dẫn sử dụng
 
-### Chạy toàn bộ demo một lệnh
+### Chạy toàn bộ demo một lệnh (Linux / Git Bash)
 
 ```bash
 bash scripts/run_demo.sh
 ```
 
-### Train mô hình
+### Train mô hình (thủ công)
 
 ```bash
-python ml/train.py \
+docker compose exec -e PYTHONPATH=/app -T ml_service python ml/train.py \
     --data data/synthetic/icu_data_synthetic.csv \
     --experiment-name "sepsis_v1" \
     --model-name "sepsis_xgboost"
 
 # Xem kết quả trên MLflow UI
-open http://localhost:5000
+# Mở http://localhost:5000
 ```
 
 ### Evaluate và xuất báo cáo
 
 ```bash
-python ml/evaluate.py \
+docker compose exec -e PYTHONPATH=/app -T ml_service python ml/evaluate.py \
     --model-version 1 \
     --test-data data/processed/features_test.parquet \
     --output reports/evaluation_v1/
@@ -371,10 +379,10 @@ python ml/evaluate.py \
 
 ```bash
 # Toàn bộ test suite
-pytest tests/ -v
+docker compose exec -e PYTHONPATH=/app -T ml_service pytest tests/ -v
 
 # Chỉ unit test
-pytest tests/unit/ -v
+docker compose exec -e PYTHONPATH=/app -T ml_service pytest tests/unit/ -v
 ```
 
 ---
