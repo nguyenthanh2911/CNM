@@ -43,13 +43,38 @@ class SepsisXGBModel:
         params["scale_pos_weight"] = scale_pos_weight
 
         self.model = XGBClassifier(**params)
-        self.model.fit(
-            X_train,
-            y_train,
-            eval_set=[(X_val, y_val)],
-            early_stopping_rounds=20,
-            verbose=False,
-        )
+
+        fit_kwargs = {
+            "eval_set": [(X_val, y_val)],
+            "verbose": False,
+        }
+
+        # XGBoost compatibility: some versions accept early_stopping_rounds directly,
+        # newer versions may require callbacks.
+        try:
+            self.model.fit(
+                X_train,
+                y_train,
+                early_stopping_rounds=20,
+                **fit_kwargs,
+            )
+        except TypeError:
+            try:
+                from xgboost.callback import EarlyStopping
+
+                self.model.fit(
+                    X_train,
+                    y_train,
+                    callbacks=[EarlyStopping(rounds=20, save_best=True)],
+                    **fit_kwargs,
+                )
+            except Exception:
+                # Last resort: train without early stopping
+                self.model.fit(
+                    X_train,
+                    y_train,
+                    **fit_kwargs,
+                )
         self.params = params
         return self
 
@@ -77,3 +102,5 @@ class SepsisXGBModel:
         else:
             obj.model = payload
         return obj
+
+

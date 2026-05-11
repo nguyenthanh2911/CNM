@@ -208,6 +208,42 @@ class ICUSepsisGenerator:
         df = df[desired_cols]
         df.to_csv(output_path, index=False)
 
+    def generate_dataframe(self) -> pd.DataFrame:
+        """Generate a full synthetic dataset and return as a DataFrame (no file I/O)."""
+        records: List[Dict[str, Any]] = []
+        start = datetime.now(timezone.utc)
+        total_records_per_patient = int(self.hours * 60 / self.interval_minutes)
+        delta = timedelta(minutes=self.interval_minutes)
+
+        for patient_id in sorted(self._patients.keys()):
+            for idx in range(total_records_per_patient):
+                timestamp = start + idx * delta
+                hour = int((idx * self.interval_minutes) // 60)
+                record = self._build_record(patient_id, timestamp, hour)
+                records.append(record)
+
+            if records:
+                self._last_record_by_patient[patient_id] = records[-1]
+
+        df = pd.DataFrame.from_records(records)
+        desired_cols = [
+            "patient_id",
+            "timestamp",
+            "heart_rate",
+            "systolic_bp",
+            "diastolic_bp",
+            "temperature",
+            "spo2",
+            "respiratory_rate",
+            "lactate",
+            "wbc",
+            "creatinine",
+            "bilirubin",
+            "platelet",
+            "sepsis_label",
+        ]
+        return df[desired_cols]
+
     def stream_one_record(self, patient_id: str) -> Dict[str, Any]:
         if patient_id not in self._patients:
             raise KeyError(f"Unknown patient_id: {patient_id}")

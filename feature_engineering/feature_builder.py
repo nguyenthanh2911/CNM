@@ -27,9 +27,9 @@ class FeatureBuilder:
         df = add_rolling_features(df, patient_col=self.patient_col, time_col=self.time_col)
 
         # 2) Clinical scores
-        df["sofa"] = df.apply(calculate_sofa, axis=1)
-        df["news2"] = df.apply(calculate_news2, axis=1)
-        df["qsofa"] = df.apply(calculate_qsofa, axis=1)
+        df["sofa_score"] = df.apply(calculate_sofa, axis=1)
+        df["news2_score"] = df.apply(calculate_news2, axis=1)
+        df["qsofa_score"] = df.apply(calculate_qsofa, axis=1)
 
         # 3) Time since last abnormal HR (minutes)
         if "heart_rate" in df.columns:
