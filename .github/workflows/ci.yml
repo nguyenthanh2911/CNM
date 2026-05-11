@@ -1,0 +1,73 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: sepsis_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Set env vars
+        run: |
+          echo "POSTGRES_DB=sepsis_test" >> $GITHUB_ENV
+          echo "POSTGRES_USER=test_user" >> $GITHUB_ENV
+          echo "POSTGRES_PASSWORD=test_pass" >> $GITHUB_ENV
+          echo "POSTGRES_HOST=localhost" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_URI=http://localhost:5000" >> $GITHUB_ENV
+      
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --tb=short --cov=. --cov-report=xml
+      
+      - name: Run integration tests
+        run: pytest tests/integration/ -v --tb=short
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+          fail_ci_if_error: false
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build Docker images
+        run: docker compose build
+      
+      - name: Smoke test
+        run: |
+          docker compose up -d postgres mlflow
+          sleep 20
+          docker compose up -d ml_service alert_service web
+          sleep 15
+          bash scripts/check_health.sh || true
+          docker compose down
