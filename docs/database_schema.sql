@@ -3,7 +3,7 @@
 -- Required for gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE patients (
+CREATE TABLE IF NOT EXISTS patients (
   patient_id VARCHAR(20) PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   age INT,
@@ -12,7 +12,7 @@ CREATE TABLE patients (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE admissions (
+CREATE TABLE IF NOT EXISTS admissions (
   admission_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_id VARCHAR(20) REFERENCES patients(patient_id),
   admitted_at TIMESTAMP NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE admissions (
   status VARCHAR(20) DEFAULT 'active'
 );
 
-CREATE TABLE vital_records (
+CREATE TABLE IF NOT EXISTS vital_records (
   record_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_id VARCHAR(20) REFERENCES patients(patient_id),
   timestamp TIMESTAMP NOT NULL,
@@ -30,9 +30,9 @@ CREATE TABLE vital_records (
   lactate FLOAT, wbc FLOAT, creatinine FLOAT,
   bilirubin FLOAT, platelet FLOAT
 );
-CREATE INDEX idx_vital_patient_time ON vital_records(patient_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_vital_patient_time ON vital_records(patient_id, timestamp DESC);
 
-CREATE TABLE prediction_results (
+CREATE TABLE IF NOT EXISTS prediction_results (
   result_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_id VARCHAR(20) REFERENCES patients(patient_id),
   timestamp TIMESTAMP NOT NULL,
@@ -43,9 +43,9 @@ CREATE TABLE prediction_results (
   inference_ms FLOAT,
   created_at TIMESTAMP DEFAULT NOW()
 );
-CREATE INDEX idx_pred_patient_time ON prediction_results(patient_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_pred_patient_time ON prediction_results(patient_id, timestamp DESC);
 
-CREATE TABLE alerts (
+CREATE TABLE IF NOT EXISTS alerts (
   alert_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_id VARCHAR(20) REFERENCES patients(patient_id),
   result_id UUID REFERENCES prediction_results(result_id),
@@ -56,5 +56,5 @@ CREATE TABLE alerts (
   ack_by VARCHAR(100),
   ack_at TIMESTAMP
 );
-CREATE INDEX idx_alerts_patient ON alerts(patient_id, created_at DESC);
-CREATE INDEX idx_alerts_unacked ON alerts(acknowledged) WHERE acknowledged = FALSE;
+CREATE INDEX IF NOT EXISTS idx_alerts_patient ON alerts(patient_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alerts_unacked ON alerts(acknowledged) WHERE acknowledged = FALSE;

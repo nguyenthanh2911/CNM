@@ -210,6 +210,7 @@ CNM/
 │
 └── scripts/
     ├── setup_db.sh
+  ├── setup_db.ps1
     ├── seed_patients.py
     ├── check_health.sh
     └── run_demo.sh
@@ -287,6 +288,14 @@ docker compose up -d
 bash scripts/check_health.sh
 ```
 
+Windows (không dùng WSL/Git Bash):
+
+```powershell
+docker compose up -d
+# (tuỳ chọn) Kiểm tra nhanh một service
+Invoke-WebRequest http://localhost:8001/health -UseBasicParsing
+```
+
 Services sẽ chạy tại:
 
 | Service | URL |
@@ -302,6 +311,13 @@ Services sẽ chạy tại:
 
 ```bash
 bash scripts/setup_db.sh
+python scripts/seed_patients.py
+```
+
+Windows (PowerShell):
+
+```powershell
+./scripts/setup_db.ps1
 python scripts/seed_patients.py
 ```
 
