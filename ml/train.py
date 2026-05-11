@@ -47,6 +47,8 @@ if __name__ == "__main__":
     # 3) Preprocess (imputation, scaling)
     pre = ICUPreprocessor()
     df_clean = pre.fit_transform(df)
+    os.makedirs("artifacts", exist_ok=True)
+    pre.save("artifacts/preprocessor.joblib")
 
     # 4) Feature building
     builder = FeatureBuilder()

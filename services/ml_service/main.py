@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -156,6 +156,15 @@ async def post_vitals(payload: VitalRequest) -> PredictionResponse:
                 pass
 
     return result
+
+
+@app.get("/vitals/{patient_id}/history")
+async def get_patient_history(patient_id: str) -> Dict[str, Any]:
+    predictor = SepsisPredictor.get_instance()
+    try:
+        return predictor.get_history(patient_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/health", response_model=HealthResponse)

@@ -129,13 +129,15 @@ class SepsisPredictor:
         sofa_score = calculate_sofa(req)
         news2_score = calculate_news2(req)
 
-        # 3) feature builder
-        df_feat = self._artifacts.feature_builder.build(df_hist)
-
-        # 4) preprocessor transform
+        # 3) preprocessor transform (impute, scale)
         pre = self._artifacts.preprocessor
         if pre is not None:
-            df_feat = pre.transform(df_feat)
+            df_clean = pre.transform(df_hist)
+        else:
+            df_clean = df_hist
+
+        # 4) feature builder
+        df_feat = self._artifacts.feature_builder.build(df_clean)
 
         # 5) last row
         id_cols = [self._artifacts.feature_builder.patient_col, self._artifacts.feature_builder.time_col]
@@ -172,6 +174,10 @@ class SepsisPredictor:
             except Exception:
                 top_features = []
 
+        if not hasattr(self, "_shap_cache"):
+            self._shap_cache = {}
+        self._shap_cache[patient_id] = [f.model_dump() for f in top_features]
+
         return PredictionResponse(
             patient_id=patient_id,
             timestamp=ts,
@@ -183,3 +189,22 @@ class SepsisPredictor:
             news2_score=int(news2_score),
             inference_time_ms=float(inference_time_ms),
         )
+
+    def get_history(self, patient_id: str) -> Dict[str, Any]:
+        if patient_id not in self._buffer or not self._buffer[patient_id]:
+            return {"latest_vitals": {}, "top_features": []}
+        
+        # Return the latest raw vitals from buffer
+        latest_record = self._buffer[patient_id][-1]
+        
+        # To get top_features, we could run explain on the last prediction,
+        # but that is already done during prediction. Since we don't cache
+        # the SHAP values in predictor, we can just return vitals. The dashboard
+        # falls back to DB alerts for SHAP if not provided.
+        # However, to be fully compatible with dashboard, we can return empty top_features
+        # and let the dashboard use the DB, OR we can cache the last top_features.
+        # For simplicity, returning just vitals is enough because dashboard fallback exists.
+        return {
+            "latest_vitals": latest_record,
+            "top_features": getattr(self, "_shap_cache", {}).get(patient_id, [])
+        }

@@ -286,10 +286,20 @@ if __name__ == "__main__":
         gen.generate_csv(args.output)
         print(f"Wrote synthetic ICU data to: {args.output}")
     else:
+        import requests
+        ml_url = os.environ.get("ML_SERVICE_URL", "http://localhost:8001").rstrip("/")
         patient_ids = sorted(gen._patients.keys())
+        print(f"Streaming data to {ml_url}/vitals ...")
         while True:
-            # Print exactly one record per tick, for a simple stream simulation.
             patient_id = str(np.random.choice(patient_ids))
             rec = gen.stream_one_record(patient_id)
-            print(rec, flush=True)
+            print(f"[{datetime.now().isoformat()}] Sending vitals for {patient_id}...")
+            try:
+                resp = requests.post(f"{ml_url}/vitals", json=rec, timeout=5.0)
+                if resp.status_code == 200:
+                    print(f"Success: {resp.json().get('risk_level')} risk")
+                else:
+                    print(f"Failed: HTTP {resp.status_code} - {resp.text}")
+            except Exception as e:
+                print(f"Error connecting to ml_service: {e}")
             time.sleep(args.interval)

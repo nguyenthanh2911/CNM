@@ -13,12 +13,12 @@ docker compose up -d
 sleep 15
 
 bash scripts/setup_db.sh
-python scripts/seed_patients.py
+docker compose exec -T ml_service python scripts/seed_patients.py
 
-python data_pipeline/data_generator.py --mode csv --patients 20 --hours 24
-python ml/train.py --data data/synthetic/icu_data_synthetic.csv --experiment-name demo
+docker compose exec -T ml_service python data_pipeline/data_generator.py --mode csv --patients 20 --hours 24 --output data/synthetic/icu_data_synthetic.csv
+docker compose exec -T ml_service python ml/train.py --data data/synthetic/icu_data_synthetic.csv --experiment-name demo --model-name sepsis_xgboost
 
 echo "Starting data stream..."
-python data_pipeline/data_generator.py --mode stream --interval 300 &
+docker compose exec -d ml_service python data_pipeline/data_generator.py --mode stream --interval 300
 
 echo "Demo running! Open http://localhost:8000"

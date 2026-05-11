@@ -265,8 +265,7 @@ Sử dụng **Sepsis-3 criteria**: bệnh nhân được gán nhãn `sepsis=1` k
 ### Yêu cầu
 
 - Docker & Docker Compose >= 2.0
-- Python >= 3.10
-- Git
+- Git (hoặc tải source dưới dạng ZIP)
 
 ### Bước 1 — Clone và cấu hình môi trường
 
@@ -284,16 +283,17 @@ cp .env.example .env
 # Khởi động tất cả services
 docker compose up -d
 
-# Kiểm tra trạng thái
-bash scripts/check_health.sh
+# (tuỳ chọn) Kiểm tra trạng thái nhanh
+docker compose ps
 ```
 
 Windows (không dùng WSL/Git Bash):
 
 ```powershell
 docker compose up -d
-# (tuỳ chọn) Kiểm tra nhanh một service
-Invoke-WebRequest http://localhost:8001/health -UseBasicParsing
+# (tuỳ chọn) Kiểm tra nhanh health endpoints
+Invoke-WebRequest http://localhost:8001/health -UseBasicParsing | Select-Object -ExpandProperty Content
+Invoke-WebRequest http://localhost:8002/health -UseBasicParsing | Select-Object -ExpandProperty Content
 ```
 
 Services sẽ chạy tại:
@@ -329,17 +329,18 @@ docker compose exec -T ml_service python scripts/seed_patients.py
 
 ### Bước 4 — Chạy demo với Synthetic Data
 
-Để tránh lỗi môi trường Python trên máy cá nhân, toàn bộ các lệnh nên được chạy thông qua container `ml_service`:
+Toàn bộ các lệnh bên dưới chạy **bên trong Docker** (không cần cài Python trên máy).
+Sau thay đổi mới nhất, `PYTHONPATH=/app` đã được cấu hình sẵn trong `docker-compose.yml`, nên không cần thêm `-e PYTHONPATH=/app`.
 
 ```bash
 # Sinh dữ liệu synthetic (chạy trong container)
-docker compose exec -e PYTHONPATH=/app -T ml_service python data_pipeline/data_generator.py --mode csv --patients 20 --hours 24
+docker compose exec -T ml_service python data_pipeline/data_generator.py --mode csv --patients 20 --hours 24 --output data/synthetic/icu_data_synthetic.csv
 
 # Train model và đăng ký lên MLflow
-docker compose exec -e PYTHONPATH=/app -T ml_service python ml/train.py --data data/synthetic/icu_data_synthetic.csv
+docker compose exec -T ml_service python ml/train.py --data data/synthetic/icu_data_synthetic.csv --experiment-name "sepsis_demo" --model-name "sepsis_xgboost"
 
 # Stream dữ liệu vào hệ thống (chạy ngầm mỗi 30 giây để test)
-docker compose exec -e PYTHONPATH=/app -d ml_service python data_pipeline/data_generator.py --mode stream --interval 30
+docker compose exec -d ml_service python data_pipeline/data_generator.py --mode stream --interval 30
 
 # Mở dashboard: http://localhost:8000
 ```
@@ -357,7 +358,7 @@ bash scripts/run_demo.sh
 ### Train mô hình (thủ công)
 
 ```bash
-docker compose exec -e PYTHONPATH=/app -T ml_service python ml/train.py \
+docker compose exec -T ml_service python ml/train.py \
     --data data/synthetic/icu_data_synthetic.csv \
     --experiment-name "sepsis_v1" \
     --model-name "sepsis_xgboost"
@@ -369,7 +370,7 @@ docker compose exec -e PYTHONPATH=/app -T ml_service python ml/train.py \
 ### Evaluate và xuất báo cáo
 
 ```bash
-docker compose exec -e PYTHONPATH=/app -T ml_service python ml/evaluate.py \
+docker compose exec -T ml_service python ml/evaluate.py \
     --model-version 1 \
     --test-data data/processed/features_test.parquet \
     --output reports/evaluation_v1/
@@ -379,10 +380,10 @@ docker compose exec -e PYTHONPATH=/app -T ml_service python ml/evaluate.py \
 
 ```bash
 # Toàn bộ test suite
-docker compose exec -e PYTHONPATH=/app -T ml_service pytest tests/ -v
+docker compose exec -T ml_service pytest tests/ -v
 
 # Chỉ unit test
-docker compose exec -e PYTHONPATH=/app -T ml_service pytest tests/unit/ -v
+docker compose exec -T ml_service pytest tests/unit/ -v
 ```
 
 ---
