@@ -1,5 +1,11 @@
 # ICU Sepsis Early Warning System
 
+![CI](https://github.com/nguyenthanh2911/CNM/actions/workflows/ci.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.10-blue)
+![XGBoost](https://img.shields.io/badge/ML-XGBoost-orange)
+![MLflow](https://img.shields.io/badge/tracking-MLflow-blue)
+![Docker](https://img.shields.io/badge/deploy-Docker-blue)
+
 > Hệ thống theo dõi ICU real-time sử dụng Machine Learning nhằm cảnh báo sớm Sepsis
 > Đồ án môn học | Khoa Công nghệ Thông tin
 
