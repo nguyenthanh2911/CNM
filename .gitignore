@@ -98,3 +98,11 @@ data/processed/
 data/synthetic/
 mlruns/
 *.parquet
+
+
+# Data files
+data/raw/
+data/processed/
+data/synthetic/
+*.psv
+*.csv
