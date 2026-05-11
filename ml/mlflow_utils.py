@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import mlflow
 import mlflow.xgboost
@@ -65,32 +65,82 @@ def register_model(run_id: str, model_name: str, stage: str = "Staging") -> str:
     return str(mv.version)
 
 
-def load_production_model(model_name: str):
+def load_production_model_with_metadata(model_name: str) -> Tuple[Any, Dict[str, Any]]:
+    """Load a model from the MLflow Model Registry and return basic metadata.
+
+    Metadata keys (best-effort):
+    - model_name
+    - model_version
+    - model_stage
+    - model_auroc
+    - model_uri
+    - run_id
+    """
     client = MlflowClient()
 
-    def _try(stage: str):
+    def _pick_model_version() -> Any | None:
+        def _version_key(v: Any) -> int:
+            try:
+                return int(getattr(v, "version", 0))
+            except Exception:
+                return 0
+
+        # Prefer Production -> Staging, then fall back to latest.
+        # Use `search_model_versions` to avoid deprecated `get_latest_versions`.
         try:
-            uri = f"models:/{model_name}/{stage}"
-            return mlflow.xgboost.load_model(uri)
+            versions = list(client.search_model_versions(f"name='{model_name}'"))
+        except Exception:
+            versions = []
+
+        if versions:
+            for preferred_stage in ("Production", "Staging"):
+                stage_versions = [v for v in versions if getattr(v, "current_stage", None) == preferred_stage]
+                if stage_versions:
+                    return max(stage_versions, key=_version_key)
+            return max(versions, key=_version_key)
+
+        # Fallback for older/alternative backends
+        try:
+            latest = client.get_latest_versions(model_name)
+            if latest:
+                return latest[0]
         except Exception:
             return None
 
-    model = _try("Production")
-    if model is not None:
-        return model
+        return None
 
-    model = _try("Staging")
-    if model is not None:
-        return model
+    mv = _pick_model_version()
+    if mv is None:
+        raise RuntimeError(f"No registered model versions found for {model_name}")
 
-    # Last resort: try latest versions directly
-    for stage in ["Production", "Staging", "None"]:
+    version = str(getattr(mv, "version", "unknown"))
+    stage = getattr(mv, "current_stage", None)
+    run_id = getattr(mv, "run_id", None)
+    model_uri = f"models:/{model_name}/{version}"
+
+    model = mlflow.xgboost.load_model(model_uri)
+
+    auroc: float | None = None
+    if run_id:
         try:
-            versions = client.get_latest_versions(model_name, stages=[stage] if stage != "None" else None)
-            if versions:
-                uri = f"models:/{model_name}/{versions[0].version}"
-                return mlflow.xgboost.load_model(uri)
+            run = client.get_run(run_id)
+            auroc_val = run.data.metrics.get("auroc")
+            if auroc_val is not None:
+                auroc = float(auroc_val)
         except Exception:
-            continue
+            auroc = None
 
-    raise RuntimeError(f"No model found for {model_name} in Production/Staging")
+    meta: Dict[str, Any] = {
+        "model_name": model_name,
+        "model_version": version,
+        "model_stage": stage,
+        "model_auroc": auroc,
+        "model_uri": model_uri,
+        "run_id": run_id,
+    }
+    return model, meta
+
+
+def load_production_model(model_name: str):
+    model, _meta = load_production_model_with_metadata(model_name)
+    return model

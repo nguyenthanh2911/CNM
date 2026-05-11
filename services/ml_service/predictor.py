@@ -15,7 +15,7 @@ from data_pipeline.preprocessor import ICUPreprocessor
 from feature_engineering.clinical_scores import calculate_news2, calculate_sofa
 from feature_engineering.feature_builder import FeatureBuilder
 from ml.explain import SepsisExplainer
-from ml.mlflow_utils import load_production_model
+from ml.mlflow_utils import load_production_model_with_metadata
 from ml.models.xgboost_model import SepsisXGBModel
 
 from .schemas import FeatureExplanation, PredictionResponse, VitalRequest
@@ -33,7 +33,8 @@ class SepsisPredictor:
     _instance: "SepsisPredictor | None" = None
 
     def __init__(self) -> None:
-        self.model_name = os.getenv("MODEL_NAME", "SepsisXGB")
+        # Keep default consistent with demo scripts and README.
+        self.model_name = os.getenv("MODEL_NAME", "sepsis_xgboost")
         self.model_version = os.getenv("MODEL_VERSION", "unknown")
         self.model_auroc = float(os.getenv("MODEL_AUROC", "0.0"))
 
@@ -62,7 +63,16 @@ class SepsisPredictor:
 
         # Load model from MLflow registry
         try:
-            model_obj = load_production_model(self.model_name)
+            model_obj, meta = load_production_model_with_metadata(self.model_name)
+
+            # Populate health metadata from MLflow (best-effort)
+            mv = meta.get("model_version")
+            if mv:
+                self.model_version = str(mv)
+            auroc = meta.get("model_auroc")
+            if auroc is not None:
+                self.model_auroc = float(auroc)
+
             # adapt to SepsisXGBModel for SHAP explainer
             wrapped = SepsisXGBModel()
             wrapped.model = model_obj

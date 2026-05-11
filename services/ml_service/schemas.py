@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class VitalRequest(BaseModel):
@@ -42,6 +42,9 @@ class PredictionResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
+    # Pydantic v2 reserves the `model_` prefix; allow it for response fields.
+    model_config = ConfigDict(protected_namespaces=())
+
     status: str
     model_version: str
     model_auroc: float

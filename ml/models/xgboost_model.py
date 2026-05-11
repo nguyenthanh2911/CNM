@@ -5,17 +5,24 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import joblib
+from sklearn.metrics import f1_score, roc_auc_score
+from sklearn.model_selection import StratifiedKFold
 from xgboost import XGBClassifier
 
 
 DEFAULT_PARAMS: Dict[str, Any] = {
-    "n_estimators": 300,
-    "max_depth": 6,
+    "n_estimators": 200,
+    "max_depth": 4,
     "learning_rate": 0.05,
-    "subsample": 0.8,
-    "colsample_bytree": 0.8,
+    "subsample": 0.7,
+    "colsample_bytree": 0.7,
+    "min_child_weight": 10,
+    "gamma": 1.0,
+    "reg_alpha": 0.5,
+    "reg_lambda": 2.0,
+    "max_delta_step": 1,
     "use_label_encoder": False,
-    "eval_metric": "auc",
+    "eval_metric": ["auc", "logloss"],
     "random_state": 42,
 }
 
@@ -55,7 +62,7 @@ class SepsisXGBModel:
             self.model.fit(
                 X_train,
                 y_train,
-                early_stopping_rounds=20,
+                early_stopping_rounds=30,
                 **fit_kwargs,
             )
         except TypeError:
@@ -65,7 +72,7 @@ class SepsisXGBModel:
                 self.model.fit(
                     X_train,
                     y_train,
-                    callbacks=[EarlyStopping(rounds=20, save_best=True)],
+                    callbacks=[EarlyStopping(rounds=30, save_best=True)],
                     **fit_kwargs,
                 )
             except Exception:
@@ -75,8 +82,67 @@ class SepsisXGBModel:
                     y_train,
                     **fit_kwargs,
                 )
+
+        # Diagnostics: best_iteration + train/val AUC gap
+        best_it = getattr(self.model, "best_iteration", None)
+        try:
+            train_auc = float(roc_auc_score(np.asarray(y_train).astype(int), self.model.predict_proba(X_train)[:, 1]))
+        except Exception:
+            train_auc = float("nan")
+        try:
+            val_auc = float(roc_auc_score(np.asarray(y_val).astype(int), self.model.predict_proba(X_val)[:, 1]))
+        except Exception:
+            val_auc = float("nan")
+
+        print(f"best_iteration: {best_it}")
+        print(f"train_AUC: {train_auc:.4f}")
+        print(f"val_AUC: {val_auc:.4f}")
+        if np.isfinite(train_auc) and np.isfinite(val_auc) and (train_auc - val_auc) > 0.15:
+            print("POSSIBLE OVERFIT DETECTED")
+
         self.params = params
         return self
+
+    def cross_validate(self, X, y, n_folds: int = 5) -> Dict[str, float]:
+        skf = StratifiedKFold(n_splits=int(n_folds), shuffle=True, random_state=42)
+
+        aucs: list[float] = []
+        f1s: list[float] = []
+
+        y_arr = np.asarray(y).astype(int)
+        for train_idx, val_idx in skf.split(X, y_arr):
+            X_tr = X.iloc[train_idx] if hasattr(X, "iloc") else X[train_idx]
+            y_tr = y_arr[train_idx]
+            X_va = X.iloc[val_idx] if hasattr(X, "iloc") else X[val_idx]
+            y_va = y_arr[val_idx]
+
+            fold_model = SepsisXGBModel(params=dict(self.params or {}))
+            fold_model.fit(X_tr, y_tr, X_va, y_va)
+
+            y_proba = np.asarray(fold_model.predict_proba(X_va))[:, 1]
+            y_pred = (y_proba >= 0.4).astype(int)
+
+            try:
+                aucs.append(float(roc_auc_score(y_va, y_proba)))
+            except Exception:
+                # If fold has single class (rare), skip AUC
+                continue
+            f1s.append(float(f1_score(y_va, y_pred)))
+
+        mean_auroc = float(np.mean(aucs)) if aucs else 0.0
+        std_auroc = float(np.std(aucs)) if aucs else 0.0
+        mean_f1 = float(np.mean(f1s)) if f1s else 0.0
+        std_f1 = float(np.std(f1s)) if f1s else 0.0
+
+        if std_auroc > 0.05:
+            print("HIGH VARIANCE - possible overfit")
+
+        return {
+            "mean_auroc": mean_auroc,
+            "std_auroc": std_auroc,
+            "mean_f1": mean_f1,
+            "std_f1": std_f1,
+        }
 
     def predict_proba(self, X) -> np.ndarray:
         if self.model is None:
