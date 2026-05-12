@@ -1162,7 +1162,7 @@ FastAPI ML Service tại `http://localhost:8001` nhận vitals qua `POST /vitals
 
 ### 2.2.3 Chức năng dashboard và cảnh báo real-time (Django)
 
-Dashboard Django tại `http://localhost:8000` hiển thị danh sách bệnh nhân với risk score cập nhật mỗi 5 phút, màu sắc phân biệt theo mức độ (xanh / vàng / đỏ). Trang chi tiết bệnh nhân hiển thị biểu đồ risk score 2 giờ gần nhất, vitals hiện tại và top-5 SHAP features dạng bar chart. Khi risk score ≥ 0.7, hệ thống tự động đẩy cảnh báo CRITICAL qua WebSocket đến tất cả client đang kết nối mà không cần reload trang. Y tá có thể acknowledge alert trực tiếp từ dashboard, trạng thái cập nhật realtime cho toàn bộ người dùng.
+Dashboard Django tại `http://localhost:8000` hiển thị danh sách bệnh nhân với risk score cập nhật mỗi 5 phút, màu sắc phân biệt theo mức độ (xanh / vàng / đỏ). Trang chi tiết bệnh nhân hiển thị biểu đồ risk score 2 giờ gần nhất, vitals hiện tại và top-5 SHAP features dạng bar chart. Khi risk score ≥ 0.7, hệ thống tự động đẩy cảnh báo CRITICAL qua WebSocket đến tất cả client đang kết nối mà không cần reload trang. Y tá có thể acknowledge alert trực tiếp từ dashboard, trạng thái cập nhật realtime cho toàn bộ người dùng
 
 *(Chèn ảnh: trang danh sách bệnh nhân, trang chi tiết, popup cảnh báo CRITICAL)*
 
