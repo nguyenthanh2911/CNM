@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 Simulate 20 ICU patients sending vitals to ML service in realtime.
-Each patient sends new vitals every 10 seconds, indefinitely.
+Every 1 second, ALL 20 patients send their latest vitals simultaneously.
 """
 
 import random
 import time
-import threading
+import concurrent.futures
 from datetime import datetime, timezone
 
 import httpx
@@ -47,8 +47,6 @@ def sanitize_vitals(vitals: dict) -> dict:
 
 # 20 bệnh nhân với profile sinh lý khác nhau
 PATIENTS = [
-    # (patient_id, profile)
-    # profile: base vitals + severity (0=stable, 1=warning, 2=critical)
     {"id": "P0001", "severity": 2, "name": "Nguyễn Văn An"},
     {"id": "P0002", "severity": 0, "name": "Trần Thị Bình"},
     {"id": "P0003", "severity": 1, "name": "Lê Văn Cường"},
@@ -142,8 +140,8 @@ def get_next_vitals(patient: dict) -> dict:
     return sanitize_vitals(drifted)
 
 
-def send_vitals(patient: dict) -> None:
-    """Gửi 1 lần vitals cho 1 bệnh nhân."""
+def send_one_patient(patient: dict) -> str:
+    """Gửi vitals cho 1 bệnh nhân, trả về string kết quả."""
     vitals = get_next_vitals(patient)
     payload = {
         "patient_id": patient["id"],
@@ -154,65 +152,50 @@ def send_vitals(patient: dict) -> None:
     try:
         with httpx.Client(timeout=5.0) as client:
             resp = client.post(ML_SERVICE_URL, json=payload)
-            # FastAPI returns JSON for 4xx too; make failures explicit.
             if resp.status_code != 200:
                 try:
                     err = resp.json()
                 except Exception:
                     err = {"text": resp.text}
-                print(
-                    f"[{datetime.now().strftime('%H:%M:%S')}] "
-                    f"{patient['id']:6s} | HTTP {resp.status_code} | {err}"
-                )
-                return
+                return (f"[{datetime.now().strftime('%H:%M:%S')}] "
+                        f"{patient['id']:6s} | HTTP {resp.status_code} | {err}")
 
             result = resp.json()
             level = result.get("risk_level", "?")
             score = float(result.get("risk_score", 0.0) or 0.0)
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] "
-                  f"{patient['id']:6s} | {level:8s} | score={score:.3f} | "
-                  f"HR={vitals['heart_rate']:.0f} BP={vitals['systolic_bp']:.0f}/"
-                  f"{vitals['diastolic_bp']:.0f} SpO2={vitals['spo2']:.1f}%")
+            return (f"[{datetime.now().strftime('%H:%M:%S')}] "
+                    f"{patient['id']:6s} | {level:8s} | score={score:.3f} | "
+                    f"HR={vitals['heart_rate']:.0f} BP={vitals['systolic_bp']:.0f}/"
+                    f"{vitals['diastolic_bp']:.0f} SpO2={vitals['spo2']:.1f}%")
     except Exception as e:
-        print(f"[ERROR] {patient['id']}: {e}")
+        return f"[ERROR] {patient['id']}: {e}"
 
 
-def patient_loop(patient: dict, interval: int, stagger: float) -> None:
-    """Vòng lặp gửi vitals cho 1 bệnh nhân, stagger để không gửi cùng lúc."""
-    time.sleep(stagger)
-    while True:
-        send_vitals(patient)
-        time.sleep(interval)
+def send_all_patients():
+    """Gửi vitals cho tất cả 20 bệnh nhân song song, in kết quả gộp."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        futures = {executor.submit(send_one_patient, p): p for p in PATIENTS}
+        for future in concurrent.futures.as_completed(futures):
+            line = future.result()
+            print(line)
 
 
 def main():
     print("=" * 65)
     print(" ICU Sepsis — Realtime Simulation — 20 Patients")
+    print(" Mỗi 1 giây: gửi đồng thời 20 bệnh nhân")
     print(" Ctrl+C để dừng")
     print("=" * 65)
 
-    INTERVAL = 10    # giây giữa mỗi lần gửi vitals
-    threads = []
-
-    for i, patient in enumerate(PATIENTS):
-        stagger = i * 0.5   # mỗi bệnh nhân cách nhau 0.5s để không flood
-        t = threading.Thread(
-            target=patient_loop,
-            args=(patient, INTERVAL, stagger),
-            daemon=True,
-        )
-        t.start()
-        threads.append(t)
-        sev_label = "STABLE" if patient["severity"] == 0 else "WARNING" if patient["severity"] == 1 else "CRITICAL"
-        print(f"  Started thread for {patient['id']} ({patient['name']}) — severity={sev_label}")
-
-    print(f"\n✅ {len(PATIENTS)} patient threads running. Sending every {INTERVAL}s...\n")
+    print(f"\n {len(PATIENTS)} patients. Sending ALL every 1 second...\n")
 
     try:
         while True:
+            send_all_patients()
+            print(f"--- Round complete at {datetime.now().strftime('%H:%M:%S')} ---\n")
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n⛔ Simulation stopped.")
+        print("\n Simulation stopped.")
 
 
 if __name__ == "__main__":
