@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Simulate 20 ICU patients sending vitals to ML service in realtime.
-Every 1 second, ALL 20 patients send their latest vitals simultaneously.
+Every 5 seconds, ALL 20 patients send their latest vitals simultaneously.
 """
 
 import random
@@ -183,17 +183,17 @@ def send_all_patients():
 def main():
     print("=" * 65)
     print(" ICU Sepsis — Realtime Simulation — 20 Patients")
-    print(" Mỗi 1 giây: gửi đồng thời 20 bệnh nhân")
+    print(" Mỗi 5 giây: gửi đồng thời 20 bệnh nhân")
     print(" Ctrl+C để dừng")
     print("=" * 65)
 
-    print(f"\n {len(PATIENTS)} patients. Sending ALL every 1 second...\n")
+    print(f"\n {len(PATIENTS)} patients. Sending ALL every 5 seconds...\n")
 
     try:
         while True:
             send_all_patients()
             print(f"--- Round complete at {datetime.now().strftime('%H:%M:%S')} ---\n")
-            time.sleep(1)
+            time.sleep(5)
     except KeyboardInterrupt:
         print("\n Simulation stopped.")
 
