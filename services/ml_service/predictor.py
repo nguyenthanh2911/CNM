@@ -187,6 +187,24 @@ class SepsisPredictor:
             self._shap_cache = {}
         self._shap_cache[patient_id] = [f.model_dump() for f in top_features]
 
+        # THÊM MỚI — cache raw vitals cho get_history()
+        if not hasattr(self, "_vitals_cache"):
+            self._vitals_cache = {}
+        self._vitals_cache[patient_id] = {
+            "heart_rate": req.get("heart_rate"),
+            "systolic_bp": req.get("systolic_bp"),
+            "diastolic_bp": req.get("diastolic_bp"),
+            "temperature": req.get("temperature"),
+            "spo2": req.get("spo2"),
+            "respiratory_rate": req.get("respiratory_rate"),
+            "lactate": req.get("lactate"),
+            "wbc": req.get("wbc"),
+            "creatinine": req.get("creatinine"),
+            "bilirubin": req.get("bilirubin"),
+            "platelet": req.get("platelet"),
+            "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+        }
+
         return PredictionResponse(
             patient_id=patient_id,
             timestamp=ts,
@@ -200,9 +218,7 @@ class SepsisPredictor:
         )
 
     def get_history(self, patient_id: str) -> Dict[str, Any]:
-        # Since we no longer maintain buffer, return empty history
-        # Dashboard falls back to DB alerts for SHAP
         return {
-            "latest_vitals": {},
+            "latest_vitals": getattr(self, "_vitals_cache", {}).get(patient_id, {}),
             "top_features": getattr(self, "_shap_cache", {}).get(patient_id, [])
         }
