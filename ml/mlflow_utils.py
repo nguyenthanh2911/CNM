@@ -124,9 +124,12 @@ def load_production_model_with_metadata(model_name: str) -> Tuple[Any, Dict[str,
     if run_id:
         try:
             run = client.get_run(run_id)
-            auroc_val = run.data.metrics.get("auroc")
-            if auroc_val is not None:
-                auroc = float(auroc_val)
+            # Thử key chính xác "auroc", fallback qua test_auroc -> val_auroc -> train_auroc
+            for key in ("auroc", "test_auroc", "val_auroc", "train_auroc"):
+                auroc_val = run.data.metrics.get(key)
+                if auroc_val is not None:
+                    auroc = float(auroc_val)
+                    break
         except Exception:
             auroc = None
 
@@ -144,3 +147,4 @@ def load_production_model_with_metadata(model_name: str) -> Tuple[Any, Dict[str,
 def load_production_model(model_name: str):
     model, _meta = load_production_model_with_metadata(model_name)
     return model
+

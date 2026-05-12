@@ -45,7 +45,6 @@ services:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     networks:
       - icu-network
-
   grafana:
     image: grafana/grafana:latest
     ports:
@@ -73,12 +72,13 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - ALERT_SERVICE_URL=http://alert_service:8002
+      - ALERT_SERVICE_URL=http://alert_service:8002/alerts
     depends_on:
       - postgres
       - mlflow
     volumes:
       - .:/app
+      - mlflow_data:/mlflow/artifacts
     networks:
       - icu-network
     restart: unless-stopped
@@ -114,7 +114,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - ML_SERVICE_URL=http://ml_service:8001
-      - ALERT_SERVICE_URL=http://alert_service:8002
+      - ALERT_SERVICE_URL=http://alert_service:8002/alerts
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
       - postgres
@@ -128,3 +128,4 @@ volumes:
   postgres_data:
   mlflow_data:
   grafana_data:
+
