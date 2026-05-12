@@ -386,6 +386,24 @@ docker compose exec -T ml_service pytest tests/ -v
 docker compose exec -T ml_service pytest tests/unit/ -v
 ```
 
+### Xoá toàn bộ dữ liệu (Reset database)
+
+Lưu ý: Dashboard đang hiển thị dữ liệu từ bảng `predictions`, nên khi reset cần xoá cả `predictions` (ngoài `prediction_results`).
+
+Linux / macOS:
+
+```bash
+docker compose exec -T postgres psql -U sepsis_user -d sepsis_db -c "TRUNCATE TABLE alerts, prediction_results, predictions, vital_records, admissions, patients CASCADE;"
+```
+
+Windows (PowerShell):
+
+```powershell
+docker compose exec -T postgres psql -U sepsis_user -d sepsis_db -c "TRUNCATE TABLE alerts, prediction_results, predictions, vital_records, admissions, patients CASCADE;"
+```
+
+Nếu bạn đang chạy stream/simulator (ví dụ `data_generator.py --mode stream`) thì dữ liệu sẽ được ghi lại ngay sau khi xoá; hãy dừng tiến trình đó trước, rồi hard refresh Dashboard (`Ctrl+F5`).
+
 ---
 
 ## 8. Quy trình ML Pipeline

@@ -14,7 +14,7 @@ class Prediction(models.Model):
 
     sofa_score = models.IntegerField()
     news2_score = models.IntegerField()
-        inference_time_ms = models.FloatField()
+    inference_time_ms = models.FloatField()
 
     # THÊM MỚI
     heart_rate = models.FloatField(null=True, blank=True)
