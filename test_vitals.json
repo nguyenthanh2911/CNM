@@ -1,0 +1,10 @@
+{
+  "patient_id": "P0001",
+  "timestamp": "2026-05-12T10:00:00",
+  "heart_rate": 130,
+  "systolic_bp": 80,
+  "diastolic_bp": 55,
+  "temperature": 39.2,
+  "spo2": 91,
+  "respiratory_rate": 26
+}

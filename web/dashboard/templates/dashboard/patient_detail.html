@@ -46,7 +46,7 @@
       <div class="card-header">Top 5 SHAP features</div>
       <div class="card-body">
         <canvas id="shapChart" height="160"></canvas>
-        {% if not shap_features %}
+                {% if not shap_features_json or shap_features_json == "[]" %}
           <div class="text-muted small mt-2">Chưa có dữ liệu SHAP</div>
         {% endif %}
       </div>
