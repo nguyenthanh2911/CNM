@@ -1,4 +1,4 @@
-# ICU Sepsis Early Warning System
+﻿# ICU Sepsis Early Warning System
 
 ![CI](https://github.com/nguyenthanh2911/CNM/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.10-blue)
@@ -340,7 +340,8 @@ docker compose exec -T ml_service python data_pipeline/data_generator.py --mode 
 docker compose exec -T ml_service python ml/train.py --data data/synthetic/icu_data_synthetic.csv --experiment-name "sepsis_demo" --model-name "sepsis_xgboost"
 
 # Stream dữ liệu vào hệ thống (chạy ngầm mỗi 30 giây để test)
-docker compose exec -d ml_service python data_pipeline/data_generator.py --mode stream --interval 30
+# Mô phỏng 20 bệnh nhân ICU real-time (chạy ngầm, mỗi 10s gửi vitals)
+docker compose exec -d ml_service python scripts/simulate_realtime.py
 
 # Mở dashboard: http://localhost:8000
 ```
