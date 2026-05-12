@@ -14,7 +14,20 @@ class Prediction(models.Model):
 
     sofa_score = models.IntegerField()
     news2_score = models.IntegerField()
-    inference_time_ms = models.FloatField()
+        inference_time_ms = models.FloatField()
+
+    # THÊM MỚI
+    heart_rate = models.FloatField(null=True, blank=True)
+    systolic_bp = models.FloatField(null=True, blank=True)
+    diastolic_bp = models.FloatField(null=True, blank=True)
+    temperature = models.FloatField(null=True, blank=True)
+    spo2 = models.FloatField(null=True, blank=True)
+    respiratory_rate = models.FloatField(null=True, blank=True)
+    lactate = models.FloatField(null=True, blank=True)
+    wbc = models.FloatField(null=True, blank=True)
+    creatinine = models.FloatField(null=True, blank=True)
+    bilirubin = models.FloatField(null=True, blank=True)
+    platelet = models.FloatField(null=True, blank=True)
 
     created_at = models.DateTimeField()
 

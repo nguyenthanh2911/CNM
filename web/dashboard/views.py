@@ -104,6 +104,24 @@ def patient_detail(request: HttpRequest, patient_id: str) -> HttpResponse:
     except Exception:
         pass
 
+    # Fallback: nếu ML service không trả vitals, lấy từ DB
+    if not vitals and latest_pred:
+        vitals = {
+            "heart_rate": latest_pred.heart_rate,
+            "systolic_bp": latest_pred.systolic_bp,
+            "diastolic_bp": latest_pred.diastolic_bp,
+            "temperature": latest_pred.temperature,
+            "spo2": latest_pred.spo2,
+            "respiratory_rate": latest_pred.respiratory_rate,
+            "lactate": latest_pred.lactate,
+            "wbc": latest_pred.wbc,
+            "creatinine": latest_pred.creatinine,
+            "bilirubin": latest_pred.bilirubin,
+            "platelet": latest_pred.platelet,
+        }
+        # Bỏ None values
+        vitals = {k: v for k, v in vitals.items() if v is not None}
+
     # Fallback: use latest alert (if any) for SHAP features
     if not shap_features:
         alert = Alert.objects.filter(patient_id=patient_id).order_by("-created_at").first()
