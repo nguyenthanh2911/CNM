@@ -58,31 +58,31 @@
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">HR</div>
-      <div class="fs-4 fw-bold">{{ vitals.heart_rate|default:"-" }}</div>
+      <div class="fs-4 fw-bold">{% if vitals.heart_rate %}{{ vitals.heart_rate|floatformat:0 }} bpm{% else %}-{% endif %}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">BP</div>
-      <div class="fs-6 fw-bold">{{ vitals.systolic_bp|default:"-" }} / {{ vitals.diastolic_bp|default:"-" }}</div>
+      <div class="fs-6 fw-bold">{% if vitals.systolic_bp %}{{ vitals.systolic_bp|floatformat:0 }}/{{ vitals.diastolic_bp|floatformat:0 }} mmHg{% else %}-/-{% endif %}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">SpO2</div>
-      <div class="fs-4 fw-bold">{{ vitals.spo2|default:"-" }}</div>
+      <div class="fs-4 fw-bold">{% if vitals.spo2 %}{{ vitals.spo2|floatformat:1 }}%{% else %}-{% endif %}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">Temp</div>
-      <div class="fs-4 fw-bold">{{ vitals.temperature|default:"-" }}</div>
+      <div class="fs-4 fw-bold">{% if vitals.temperature %}{{ vitals.temperature|floatformat:1 }}°C{% else %}-{% endif %}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">RR</div>
-      <div class="fs-4 fw-bold">{{ vitals.respiratory_rate|default:"-" }}</div>
+      <div class="fs-4 fw-bold">{% if vitals.respiratory_rate %}{{ vitals.respiratory_rate|floatformat:0 }} /min{% else %}-{% endif %}</div>
     </div></div>
   </div>
 </div>
@@ -117,7 +117,7 @@
   const shapLabels = shap.map(x => x.feature);
   const shapValues = shap.map(x => x.shap_value);
 
-  new Chart(document.getElementById('shapChart'), {
+    new Chart(document.getElementById('shapChart'), {
     type: 'bar',
     data: {
       labels: shapLabels,
@@ -135,5 +135,37 @@
       }
     }
   });
+</script>
+
+<script>
+  // ── Auto-refresh mỗi 10 giây ──────────────────────────────────────
+  const REFRESH_MS = 10000;
+  let refreshTimer = setTimeout(() => location.reload(), REFRESH_MS);
+
+  // ── WebSocket realtime alert ───────────────────────────────────────
+    const patientId = "{{ patient_id }}";
+  const wsUrl = "ws://" + location.host.replace('8000','8002') + "/ws/" + patientId;
+
+  function connectWS() {
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => console.log("[WS] Connected for", patientId);
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === "CRITICAL_ALERT" && msg.data.patient_id === patientId) {
+        // Reset timer và reload ngay
+        clearTimeout(refreshTimer);
+        setTimeout(() => location.reload(), 300);
+      }
+    };
+
+    ws.onclose = () => {
+      // Reconnect sau 5 giây nếu mất kết nối
+      setTimeout(connectWS, 5000);
+    };
+  }
+
+  connectWS();
 </script>
 {% endblock %}

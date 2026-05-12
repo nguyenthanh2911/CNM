@@ -59,7 +59,7 @@
             <td>
               <div class="progress" role="progressbar" aria-label="risk" aria-valuenow="{{ p.risk_score|floatformat:2 }}" aria-valuemin="0" aria-valuemax="1">
                 {% if p.risk_level == 'CRITICAL' %}
-                  <div class="progress-bar bg-danger" style="width: {{ p.risk_pct|floatformat:0 }}%;"></div>
+                <div class="progress-bar bg-danger" style="width: {{ p.risk_pct|floatformat:0 }}%;"></div>
                 {% elif p.risk_level == 'WARNING' %}
                   <div class="progress-bar bg-warning" style="width: {{ p.risk_pct|floatformat:0 }}%;"></div>
                 {% else %}
@@ -90,6 +90,29 @@
 </div>
 
 <script>
-  setTimeout(() => location.reload(), 300000);
+  const REFRESH_MS = 15000;
+  let refreshTimer = setTimeout(() => location.reload(), REFRESH_MS);
+
+  const wsUrl = `ws://${location.host.replace('8000','8002')}/ws/all`;
+
+  function connectWS() {
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === "CRITICAL_ALERT") {
+        // Highlight row bệnh nhân có alert mới
+        const rows = document.querySelectorAll(`[data-patient-id="${msg.data.patient_id}"]`);
+        rows.forEach(r => r.style.outline = "2px solid red");
+        // Reload sau 1.5 giây để cập nhật risk score
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(() => location.reload(), 1500);
+      }
+    };
+
+    ws.onclose = () => setTimeout(connectWS, 5000);
+  }
+
+  connectWS();
 </script>
 {% endblock %}
