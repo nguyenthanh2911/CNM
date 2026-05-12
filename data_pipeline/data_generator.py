@@ -33,6 +33,9 @@ class PhysiologicalModel:
     nonsepsis_bad_spikes: bool = False
     sepsis_recovery: bool = False
     current_hour: int = 0
+    hr_baseline: float = 0.0
+    temp_baseline: float = 0.0
+    spo2_baseline: float = 0.0
 
     def _severity_factor(self) -> float:
         """Returns a 0..1 factor; after hour 12 sepsis worsens gradually."""
@@ -95,10 +98,10 @@ class PhysiologicalModel:
         else:
             sev = _clamp(self._severity_factor() * self._severity_scale(), 0.0, 1.0)
 
-            # Start near normal and drift towards septic ranges after hour 12.
-            heart_rate = (1 - sev) * _rand_uniform(70, 105) + sev * _rand_uniform(110, 130)
-            temperature = (1 - sev) * _rand_uniform(36.8, 37.8) + sev * _rand_uniform(38.5, 40.0)
-            spo2 = (1 - sev) * _rand_uniform(94, 99) + sev * _rand_uniform(88, 94)
+            # Dùng baseline riêng thay vì range cố định
+            heart_rate = self.hr_baseline + sev * np.random.uniform(15, 40)
+            temperature = self.temp_baseline + sev * np.random.uniform(0.8, 2.5)
+            spo2 = self.spo2_baseline - sev * np.random.uniform(3, 12)
             respiratory_rate = (1 - sev) * _rand_uniform(14, 20) + sev * _rand_uniform(22, 30)
             systolic_bp = (1 - sev) * _rand_uniform(100, 130) + sev * _rand_uniform(80, 95)
             diastolic_bp = (1 - sev) * _rand_uniform(60, 85) + sev * _rand_uniform(45, 65)
@@ -121,12 +124,12 @@ class PhysiologicalModel:
             temperature = float(temperature + np.random.uniform(0.0, 0.25))
 
         # Add higher noise (harder separation)
-        heart_rate = _clamp(_noisy(heart_rate, std=8.0), 30, 220)
-        systolic_bp = _clamp(_noisy(systolic_bp, std=10.0), 50, 250)
-        diastolic_bp = _clamp(_noisy(diastolic_bp, std=7.0), 30, 150)
-        temperature = _clamp(_noisy(temperature, std=0.3), 34.0, 42.0)
-        spo2 = _clamp(_noisy(spo2, std=2.5), 70.0, 100.0)
-        respiratory_rate = _clamp(_noisy(respiratory_rate, std=3.0), 4.0, 60.0)
+        heart_rate = _clamp(_noisy(heart_rate, std=10.0), 30, 220)
+        systolic_bp = _clamp(_noisy(systolic_bp, std=14.0), 50, 250)
+        diastolic_bp = _clamp(_noisy(diastolic_bp, std=9.0), 30, 150)
+        temperature = _clamp(_noisy(temperature, std=0.35), 34.0, 42.0)
+        spo2 = _clamp(_noisy(spo2, std=3.0), 70.0, 100.0)
+        respiratory_rate = _clamp(_noisy(respiratory_rate, std=4.0), 4.0, 60.0)
 
         vitals_f = {
             "heart_rate": float(heart_rate),
@@ -212,11 +215,11 @@ class LabResultModel:
                 platelet = (platelet + _rand_uniform(150, 450)) / 2
 
         # Higher lab noise (harder separation)
-        lactate = _clamp(_noisy(lactate, std=0.4), 0.0, 20.0)
-        wbc = _clamp(_noisy(wbc, std=1.5), 0.1, 80.0)
-        creatinine = _clamp(_noisy(creatinine, std=0.25), 0.0, 20.0)
+        lactate = _clamp(_noisy(lactate, std=0.5), 0.0, 20.0)
+        wbc = _clamp(_noisy(wbc, std=2.0), 0.1, 80.0)
+        creatinine = _clamp(_noisy(creatinine, std=0.3), 0.0, 20.0)
         bilirubin = _clamp(_noisy(bilirubin, std=0.35), 0.0, 50.0)
-        platelet = _clamp(_noisy(platelet, std=25.0), 1.0, 1000.0)
+        platelet = _clamp(_noisy(platelet, std=35.0), 1.0, 1000.0)
 
         labs: Dict[str, Any] = {
             "lactate": round(lactate, 2),
@@ -293,6 +296,9 @@ class ICUSepsisGenerator:
                 nonsepsis_bad_spikes=nonsepsis_bad_spikes,
                 sepsis_recovery=sepsis_recovery,
                 current_hour=0,
+                hr_baseline=float(np.random.uniform(58, 92)),
+                temp_baseline=float(np.random.uniform(36.1, 37.6)),
+                spo2_baseline=float(np.random.uniform(95, 99)),
             )
             self._sepsis_by_patient[patient_id] = has_sepsis
             self._stream_index_by_patient[patient_id] = 0

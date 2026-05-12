@@ -2,18 +2,17 @@ from __future__ import annotations
 
 import os
 import time
-from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
+import joblib
 import mlflow
 import numpy as np
 import pandas as pd
+from sklearn.pipeline import Pipeline
 
-from data_pipeline.preprocessor import ICUPreprocessor
 from feature_engineering.clinical_scores import calculate_news2, calculate_sofa
-from feature_engineering.feature_builder import FeatureBuilder
 from ml.explain import SepsisExplainer
 from ml.mlflow_utils import load_production_model_with_metadata
 from ml.models.xgboost_model import SepsisXGBModel
@@ -21,12 +20,18 @@ from ml.models.xgboost_model import SepsisXGBModel
 from .schemas import FeatureExplanation, PredictionResponse, VitalRequest
 
 
+FEATURE_COLS = [
+    'heart_rate', 'systolic_bp', 'diastolic_bp',
+    'temperature', 'spo2', 'respiratory_rate',
+    'lactate', 'wbc', 'creatinine', 'bilirubin', 'platelet'
+]
+
+
 @dataclass
 class _LoadedArtifacts:
     model: Any | None
-    preprocessor: ICUPreprocessor | None
+    preprocess_pipeline: Any | None  # sklearn Pipeline
     explainer: SepsisExplainer | None
-    feature_builder: FeatureBuilder
 
 
 class SepsisPredictor:
@@ -41,11 +46,6 @@ class SepsisPredictor:
         mlflow_uri = os.getenv("MLFLOW_URI") or os.getenv("MLFLOW_TRACKING_URI") or "http://localhost:5000"
         mlflow.set_tracking_uri(mlflow_uri)
 
-        self.preprocessor_path = os.getenv("PREPROCESSOR_PATH", "artifacts/preprocessor.joblib")
-
-        self._buffer: Dict[str, Deque[Dict[str, Any]]] = {}
-        self._maxlen = 48  # keep 4h history (48 x 5min)
-
         self._artifacts = self._load_artifacts()
 
     @classmethod
@@ -55,11 +55,9 @@ class SepsisPredictor:
         return cls._instance
 
     def _load_artifacts(self) -> _LoadedArtifacts:
-        feature_builder = FeatureBuilder()
-
         model_obj: Any | None = None
         explainer: SepsisExplainer | None = None
-        pre: ICUPreprocessor | None = None
+        preprocess_pipeline: Any | None = None
 
         # Load model from MLflow registry
         try:
@@ -81,23 +79,26 @@ class SepsisPredictor:
             model_obj = None
             explainer = None
 
-        # Load preprocessor (scaler)
+        # Load sklearn Pipeline (imputer + scaler)
         try:
-            pre = ICUPreprocessor().load(self.preprocessor_path)
-        except Exception:
-            pre = None
+            preprocess_pipeline = joblib.load(
+                os.getenv("PREPROCESSOR_PATH", "artifacts/preprocessor.joblib")
+            )
+            print("Loaded preprocessor pipeline OK")
+        except FileNotFoundError:
+            print("WARNING: preprocessor.joblib not found, will use raw features")
+            from sklearn.impute import SimpleImputer
+            from sklearn.preprocessing import StandardScaler
+            preprocess_pipeline = Pipeline([
+                ('imputer', SimpleImputer(strategy='median')),
+                ('scaler',  StandardScaler()),
+            ])
 
         return _LoadedArtifacts(
             model=model_obj,
-            preprocessor=pre,
+            preprocess_pipeline=preprocess_pipeline,
             explainer=explainer,
-            feature_builder=feature_builder,
         )
-
-    def _append_to_buffer(self, patient_id: str, record: Dict[str, Any]) -> None:
-        if patient_id not in self._buffer:
-            self._buffer[patient_id] = deque(maxlen=self._maxlen)
-        self._buffer[patient_id].append(record)
 
     def _predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         model = self._artifacts.model
@@ -128,43 +129,39 @@ class SepsisPredictor:
         ts = req["timestamp"]
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts)
-        req["timestamp"] = ts
 
-        self._append_to_buffer(patient_id, req)
-
-        history = list(self._buffer[patient_id])
-        df_hist = pd.DataFrame(history)
-
-        # Compute clinical scores on current raw row (before feature drop)
-        sofa_score = calculate_sofa(req)
+        # Tính clinical scores từ raw vitals
+        sofa_score  = calculate_sofa(req)
         news2_score = calculate_news2(req)
 
-        # 3) preprocessor transform (impute, scale)
-        pre = self._artifacts.preprocessor
-        if pre is not None:
-            df_clean = pre.transform(df_hist)
+        # Tạo DataFrame 11 raw features
+        X = pd.DataFrame([{col: req.get(col) for col in FEATURE_COLS}])
+
+        # Ép kiểu numeric
+        for col in FEATURE_COLS:
+            X[col] = pd.to_numeric(X[col], errors='coerce')
+
+        # Transform qua sklearn Pipeline
+        pipeline = self._artifacts.preprocess_pipeline
+        if pipeline is not None:
+            try:
+                X_processed = pipeline.transform(X)
+            except Exception:
+                # Pipeline chưa fit → fit tạm trên X
+                X_processed = pipeline.fit_transform(X)
         else:
-            df_clean = df_hist
+            X_processed = X.values
 
-        # 4) feature builder
-        df_feat = self._artifacts.feature_builder.build(df_clean)
-
-        # 5) last row
-        id_cols = [self._artifacts.feature_builder.patient_col, self._artifacts.feature_builder.time_col]
-        label_col = self._artifacts.feature_builder.label_col
-        feature_cols = [c for c in df_feat.columns if c not in id_cols + [label_col]]
-
-        X_last = df_feat.iloc[[-1]][feature_cols]
-
-        # 6) inference time
+        # Inference
         start = time.perf_counter()
-        proba = self._predict_proba(X_last)
+        proba = self._predict_proba(
+            pd.DataFrame(X_processed, columns=FEATURE_COLS)
+        )
         inference_time_ms = (time.perf_counter() - start) * 1000.0
 
-        # 7) risk score
         risk_score = float(proba[0, 1]) if proba.size else 0.0
 
-        # 8) risk level
+        # Risk level
         if risk_score < 0.3:
             risk_level = "LOW"
         elif risk_score < 0.7:
@@ -172,14 +169,16 @@ class SepsisPredictor:
         else:
             risk_level = "CRITICAL"
 
-        # 9) alert
         alert_triggered = risk_score >= 0.7
 
-        # 10) SHAP explain
+        # SHAP explain
         top_features: List[FeatureExplanation] = []
         if self._artifacts.model is not None and self._artifacts.explainer is not None:
             try:
-                exp = self._artifacts.explainer.explain(X_last, feature_names=feature_cols)
+                X_df = pd.DataFrame(X_processed, columns=FEATURE_COLS)
+                exp = self._artifacts.explainer.explain(
+                    X_df, feature_names=FEATURE_COLS
+                )
                 top_features = [FeatureExplanation(**d) for d in exp]
             except Exception:
                 top_features = []
@@ -201,20 +200,9 @@ class SepsisPredictor:
         )
 
     def get_history(self, patient_id: str) -> Dict[str, Any]:
-        if patient_id not in self._buffer or not self._buffer[patient_id]:
-            return {"latest_vitals": {}, "top_features": []}
-        
-        # Return the latest raw vitals from buffer
-        latest_record = self._buffer[patient_id][-1]
-        
-        # To get top_features, we could run explain on the last prediction,
-        # but that is already done during prediction. Since we don't cache
-        # the SHAP values in predictor, we can just return vitals. The dashboard
-        # falls back to DB alerts for SHAP if not provided.
-        # However, to be fully compatible with dashboard, we can return empty top_features
-        # and let the dashboard use the DB, OR we can cache the last top_features.
-        # For simplicity, returning just vitals is enough because dashboard fallback exists.
+        # Since we no longer maintain buffer, return empty history
+        # Dashboard falls back to DB alerts for SHAP
         return {
-            "latest_vitals": latest_record,
+            "latest_vitals": {},
             "top_features": getattr(self, "_shap_cache", {}).get(patient_id, [])
         }

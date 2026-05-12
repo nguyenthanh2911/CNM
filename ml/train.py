@@ -4,16 +4,26 @@ import argparse
 import os
 from typing import List
 
+import joblib
 import mlflow
 import numpy as np
 import pandas as pd
-
-from data_pipeline.preprocessor import ICUPreprocessor
-from feature_engineering.feature_builder import FeatureBuilder
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from ml.evaluate import evaluate_model
 from ml.mlflow_utils import log_training_run, register_model
 from ml.models.xgboost_model import SepsisXGBModel
+
+
+FEATURE_COLS = [
+    'heart_rate', 'systolic_bp', 'diastolic_bp',
+    'temperature', 'spo2', 'respiratory_rate',
+    'lactate', 'wbc', 'creatinine', 'bilirubin', 'platelet'
+]
+LABEL_COL = 'sepsis_label'
 
 
 def _parse_args() -> argparse.Namespace:
@@ -26,17 +36,6 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _chronological_split(df: pd.DataFrame, time_col: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    df = df.sort_values(time_col, kind="mergesort").reset_index(drop=True)
-    n = len(df)
-    n_train = int(n * 0.70)
-    n_val = int(n * 0.15)
-    train = df.iloc[:n_train]
-    val = df.iloc[n_train : n_train + n_val]
-    test = df.iloc[n_train + n_val :]
-    return train, val, test
-
-
 if __name__ == "__main__":
     args = _parse_args()
 
@@ -45,41 +44,42 @@ if __name__ == "__main__":
 
     df = pd.read_csv(args.data)
 
-    # 3) Preprocess (imputation, scaling)
-    pre = ICUPreprocessor()
-    df_clean = pre.fit_transform(df)
+    # Ép kiểu numeric như notebook
+    for col in FEATURE_COLS:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    X = df[FEATURE_COLS]
+    y = df[LABEL_COL]
+
+    print(f"Total records  : {len(df):,}")
+    print(f"Sepsis ratio   : {y.mean():.4f}")
+    print(f"Features       : {len(FEATURE_COLS)}")
+
+    # Split giống notebook: stratified 60/20/20
+    X_temp, X_test, y_temp, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_temp, y_temp, test_size=0.25, random_state=42, stratify=y_temp
+    )
+    print(f"Train: {len(X_train):,} | Val: {len(X_val):,} | Test: {len(X_test):,}")
+    print(f"Train sepsis: {y_train.mean():.4f} | Val: {y_val.mean():.4f} | Test: {y_test.mean():.4f}")
+
+    # sklearn Pipeline: impute median + scale
+    preprocess_pipeline = Pipeline([
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler',  StandardScaler()),
+    ])
+    X_train_p = preprocess_pipeline.fit_transform(X_train)
+    X_val_p   = preprocess_pipeline.transform(X_val)
+    X_test_p  = preprocess_pipeline.transform(X_test)
+
+    # Lưu pipeline
     os.makedirs("artifacts", exist_ok=True)
-    pre.save("artifacts/preprocessor.joblib")
+    joblib.dump(preprocess_pipeline, "artifacts/preprocessor.joblib")
+    print("Saved: artifacts/preprocessor.joblib")
 
-    # 4) Feature building
-    builder = FeatureBuilder()
-    df_feat = builder.build(df_clean)
-
-    # 5) Chronological split
-    time_col = builder.time_col
-    train_df, val_df, test_df = _chronological_split(df_feat, time_col=time_col)
-
-    # Distribution check
-    train_ratio = float(train_df[builder.label_col].mean()) if len(train_df) else 0.0
-    val_ratio = float(val_df[builder.label_col].mean()) if len(val_df) else 0.0
-    test_ratio = float(test_df[builder.label_col].mean()) if len(test_df) else 0.0
-    print(f"Train sepsis ratio: {train_ratio:.4f}")
-    print(f"Val   sepsis ratio: {val_ratio:.4f}")
-    print(f"Test  sepsis ratio: {test_ratio:.4f}")
-    if abs(train_ratio - test_ratio) > 0.15:
-        print("LABEL DISTRIBUTION SKEW")
-
-    # 6) X, y
-    id_cols: List[str] = [builder.patient_col, builder.time_col]
-    label_col = builder.label_col
-    feature_cols = [c for c in df_feat.columns if c not in id_cols + [label_col]]
-
-    X_train = train_df[feature_cols]
-    y_train = train_df[label_col]
-    X_val = val_df[feature_cols]
-    y_val = val_df[label_col]
-    X_test = test_df[feature_cols]
-    y_test = test_df[label_col]
+    feature_cols = FEATURE_COLS
 
     # 7) Cross-validation before main training
     params = None
@@ -87,7 +87,7 @@ if __name__ == "__main__":
         params = {"n_estimators": 50, "max_depth": 4}
 
     cv_probe = SepsisXGBModel(params=params)
-    cv_metrics = cv_probe.cross_validate(X_train, y_train, n_folds=5)
+    cv_metrics = cv_probe.cross_validate(X_train_p, y_train, n_folds=5)
     mean_auc = float(cv_metrics.get("mean_auroc", 0.0))
     std_auc = float(cv_metrics.get("std_auroc", 0.0))
     print(f"CV AUROC: {mean_auc:.4f} ± {std_auc:.4f}")
@@ -101,7 +101,7 @@ if __name__ == "__main__":
         params = tuned
 
     # Optional: SMOTE augmentation on training set only
-    X_train_fit = X_train
+    X_train_fit = X_train_p
     y_train_fit = y_train
     if args.augment:
         try:
@@ -117,7 +117,7 @@ if __name__ == "__main__":
         print(f"SMOTE before: neg={before_neg}, pos={before_pos}")
 
         smote = SMOTE(random_state=42)
-        X_res, y_res = smote.fit_resample(X_train, y_train)
+        X_res, y_res = smote.fit_resample(X_train_p, y_train)
 
         # Keep pandas columns if possible
         if isinstance(X_res, np.ndarray):
@@ -132,13 +132,13 @@ if __name__ == "__main__":
         y_train_fit = y_res
 
     model = SepsisXGBModel(params=params)
-    model.fit(X_train_fit, y_train_fit, X_val, y_val)
+    model.fit(X_train_fit, y_train_fit, X_val_p, y_val)
 
     # 8) Overfit detection + metrics across splits
     print("\n=== Split metrics ===")
-    train_metrics = evaluate_model(model, X_train, y_train)
-    val_metrics = evaluate_model(model, X_val, y_val)
-    test_metrics = evaluate_model(model, X_test, y_test)
+    train_metrics = evaluate_model(model, X_train_p, y_train)
+    val_metrics   = evaluate_model(model, X_val_p,   y_val)
+    test_metrics  = evaluate_model(model, X_test_p,  y_test)
 
     train_auroc = float(train_metrics.get("auroc", 0.0))
     val_auroc = float(val_metrics.get("auroc", 0.0))
@@ -166,7 +166,7 @@ if __name__ == "__main__":
         params=model.params or {},
         metrics=metrics,
         model=model,
-        feature_names=feature_cols,
+        feature_names=FEATURE_COLS,
         run_name="train-xgb",
         experiment_name=args.experiment_name,
     )

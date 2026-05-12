@@ -11,19 +11,18 @@ from xgboost import XGBClassifier
 
 
 DEFAULT_PARAMS: Dict[str, Any] = {
-    "n_estimators": 200,
-    "max_depth": 4,
-    "learning_rate": 0.05,
-    "subsample": 0.7,
-    "colsample_bytree": 0.7,
-    "min_child_weight": 10,
-    "gamma": 1.0,
-    "reg_alpha": 0.5,
-    "reg_lambda": 2.0,
-    "max_delta_step": 1,
-    "use_label_encoder": False,
-    "eval_metric": ["auc", "logloss"],
-    "random_state": 42,
+    "n_estimators":     150,
+    "max_depth":        4,
+    "learning_rate":    0.05,
+    "subsample":        0.65,
+    "colsample_bytree": 0.65,
+    "min_child_weight": 20,
+    "gamma":            2.0,
+    "reg_alpha":        1.0,
+    "reg_lambda":       3.0,
+    "max_delta_step":   1,
+    "eval_metric":      ["auc", "logloss"],
+    "random_state":     42,
 }
 
 
