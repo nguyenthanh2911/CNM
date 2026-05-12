@@ -43,6 +43,19 @@ class PredictionORM(Base):
     news2_score = Column(Integer, nullable=False)
     inference_time_ms = Column(Float, nullable=False)
 
+    # THÊM MỚI — raw vitals
+    heart_rate = Column(Float, nullable=True)
+    systolic_bp = Column(Float, nullable=True)
+    diastolic_bp = Column(Float, nullable=True)
+    temperature = Column(Float, nullable=True)
+    spo2 = Column(Float, nullable=True)
+    respiratory_rate = Column(Float, nullable=True)
+    lactate = Column(Float, nullable=True)
+    wbc = Column(Float, nullable=True)
+    creatinine = Column(Float, nullable=True)
+    bilirubin = Column(Float, nullable=True)
+    platelet = Column(Float, nullable=True)
+
     created_at = Column(DateTime(timezone=True), nullable=False)
 
 
@@ -130,6 +143,18 @@ async def post_vitals(payload: VitalRequest) -> PredictionResponse:
             sofa_score=int(result.sofa_score),
             news2_score=int(result.news2_score),
             inference_time_ms=float(result.inference_time_ms),
+            # THÊM MỚI — lưu raw vitals từ payload gốc
+            heart_rate=payload.heart_rate,
+            systolic_bp=payload.systolic_bp,
+            diastolic_bp=payload.diastolic_bp,
+            temperature=payload.temperature,
+            spo2=payload.spo2,
+            respiratory_rate=payload.respiratory_rate,
+            lactate=payload.lactate,
+            wbc=payload.wbc,
+            creatinine=payload.creatinine,
+            bilirubin=payload.bilirubin,
+            platelet=payload.platelet,
             created_at=now,
         )
         db.add(row)
@@ -142,13 +167,15 @@ async def post_vitals(payload: VitalRequest) -> PredictionResponse:
     if result.alert_triggered:
         async with httpx.AsyncClient(timeout=5.0) as client:
             try:
-                await client.post(
+                                await client.post(
                     alert_url,
                     json={
                         "patient_id": result.patient_id,
-                        "timestamp": result.timestamp.isoformat(),
-                        "risk_score": result.risk_score,
-                        "risk_level": result.risk_level,
+                        "risk_score": float(result.risk_score),
+                        "risk_level": str(result.risk_level),
+                        "top_features": [f.model_dump() for f in result.top_features],
+                        "sofa_score": int(result.sofa_score),
+                        "news2_score": int(result.news2_score),
                     },
                 )
             except Exception:
