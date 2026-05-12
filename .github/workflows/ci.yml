@@ -60,6 +60,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Create .env for CI
+        run: |
+          tee .env <<'ENVEOF'
+POSTGRES_DB=sepsis_test
+POSTGRES_USER=test_user
+POSTGRES_PASSWORD=test_pass
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+MLFLOW_TRACKING_URI=http://mlflow:5000
+SECRET_KEY=ci-secret-key-not-for-production
+ENVEOF
+
       - name: Build Docker images
         run: docker compose build
       
