@@ -32,6 +32,7 @@ class AlertORM(Base):
     top_features = Column(JSONB, nullable=False)
     sofa_score = Column(Integer, nullable=False)
     news2_score = Column(Integer, nullable=False)
+    alert_type = Column(String(32), nullable=False, default="sepsis")  # "sepsis" | "early_warning"
 
     created_at = Column(DateTime(timezone=True), nullable=False, index=True)
     acknowledged = Column(Boolean, nullable=False, default=False, index=True)
@@ -112,8 +113,9 @@ def startup() -> None:
             "acknowledged": "BOOLEAN DEFAULT FALSE",
             "ack_by": "VARCHAR(128)",
             "ack_at": "TIMESTAMPTZ",
+            "alert_type": "VARCHAR(32) DEFAULT 'sepsis'",
         },
-    )
+        )
 
 
 def _to_response(row: AlertORM) -> AlertResponse:
@@ -122,6 +124,7 @@ def _to_response(row: AlertORM) -> AlertResponse:
         patient_id=row.patient_id,
         risk_score=float(row.risk_score),
         risk_level=str(row.risk_level),
+        alert_type=str(row.alert_type),
         created_at=row.created_at,
         acknowledged=bool(row.acknowledged),
         ack_by=row.ack_by,
@@ -141,8 +144,9 @@ async def create_alert(payload: AlertCreate) -> AlertResponse:
             risk_score=float(payload.risk_score),
             risk_level=str(payload.risk_level),
             top_features=payload.top_features,
-            sofa_score=int(payload.sofa_score),
+                        sofa_score=int(payload.sofa_score),
             news2_score=int(payload.news2_score),
+            alert_type=payload.alert_type,
             created_at=now,
             acknowledged=False,
             ack_by=None,
@@ -284,6 +288,10 @@ async def ws_patient(websocket: WebSocket, patient_id: str):
         while True:
             msg = await websocket.receive_text()
             if msg.lower() == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, patient_id=patient_id)
+        if msg.lower() == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
         manager.disconnect(websocket, patient_id=patient_id)

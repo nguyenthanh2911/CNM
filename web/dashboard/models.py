@@ -54,6 +54,7 @@ class Alert(models.Model):
     top_features = models.JSONField()
     sofa_score = models.IntegerField()
     news2_score = models.IntegerField()
+    alert_type = models.CharField(max_length=32, default="sepsis")
 
     created_at = models.DateTimeField(db_index=True)
     acknowledged = models.BooleanField(default=False, db_index=True)

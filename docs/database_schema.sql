@@ -32,6 +32,41 @@ CREATE TABLE IF NOT EXISTS vital_records (
 );
 CREATE INDEX IF NOT EXISTS idx_vital_patient_time ON vital_records(patient_id, timestamp DESC);
 
+-- Table: predictions (synced with PredictionORM in services/ml_service/main.py)
+CREATE TABLE IF NOT EXISTS predictions (
+  id                        SERIAL PRIMARY KEY,
+  patient_id                VARCHAR(64) NOT NULL,
+  timestamp                 TIMESTAMPTZ NOT NULL,
+  risk_score                DOUBLE PRECISION NOT NULL,
+  risk_level                VARCHAR(16) NOT NULL,
+  alert_triggered           BOOLEAN NOT NULL,
+  sofa_score                INT NOT NULL,
+  news2_score               INT NOT NULL,
+  inference_time_ms         DOUBLE PRECISION NOT NULL,
+  -- raw vitals (nullable)
+  heart_rate                DOUBLE PRECISION,
+  systolic_bp               DOUBLE PRECISION,
+  diastolic_bp              DOUBLE PRECISION,
+  temperature               DOUBLE PRECISION,
+  spo2                      DOUBLE PRECISION,
+  respiratory_rate          DOUBLE PRECISION,
+  lactate                   DOUBLE PRECISION,
+  wbc                       DOUBLE PRECISION,
+  creatinine                DOUBLE PRECISION,
+  bilirubin                 DOUBLE PRECISION,
+  platelet                  DOUBLE PRECISION,
+  -- early warning scores (nullable)
+  early_warning_probability DOUBLE PRECISION,
+  early_warning_level       VARCHAR(16),
+  trend_score               DOUBLE PRECISION,
+  rate_of_change_score      DOUBLE PRECISION,
+  threshold_score           DOUBLE PRECISION,
+  created_at                TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_predictions_patient_time ON predictions(patient_id, timestamp DESC);
+
+-- DEPRECATED: prediction_results kept for backward compatibility.
+-- Use 'predictions' table instead (matching PredictionORM).
 CREATE TABLE IF NOT EXISTS prediction_results (
   result_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_id VARCHAR(20) REFERENCES patients(patient_id),
@@ -48,13 +83,16 @@ CREATE INDEX IF NOT EXISTS idx_pred_patient_time ON prediction_results(patient_i
 CREATE TABLE IF NOT EXISTS alerts (
   alert_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_id VARCHAR(20) REFERENCES patients(patient_id),
-  result_id UUID REFERENCES prediction_results(result_id),
-  severity VARCHAR(20) NOT NULL,
+  risk_score DOUBLE PRECISION NOT NULL,
+  risk_level VARCHAR(16) NOT NULL,
+  alert_type VARCHAR(32) DEFAULT 'sepsis',
   top_features JSONB,
-  created_at TIMESTAMP DEFAULT NOW(),
+  sofa_score INT NOT NULL DEFAULT 0,
+  news2_score INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL,
   acknowledged BOOLEAN DEFAULT FALSE,
-  ack_by VARCHAR(100),
-  ack_at TIMESTAMP
+  ack_by VARCHAR(128),
+  ack_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_patient ON alerts(patient_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_unacked ON alerts(acknowledged) WHERE acknowledged = FALSE;
