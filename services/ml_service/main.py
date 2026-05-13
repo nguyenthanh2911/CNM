@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import Counter, Histogram
 from prometheus_client.exposition import make_asgi_app
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .predictor import SepsisPredictor
@@ -97,6 +97,36 @@ app.mount("/metrics", make_asgi_app())
 _start_time: Optional[float] = None
 
 
+def _ensure_columns(table: str, columns: Dict[str, str]) -> None:
+    """Best-effort schema upgrade for existing tables.
+
+    `create_all()` will not add columns to an existing table. If users reuse a
+    persisted Postgres volume created with an older schema, inserts can fail
+    (while Prometheus metrics still increase), making the Django dashboard look
+    empty. This helper makes upgrades idempotent using `ADD COLUMN IF NOT EXISTS`.
+    """
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table(table):
+            return
+        existing = {c.get("name") for c in inspector.get_columns(table)}
+    except Exception:
+        return
+
+    stmts = []
+    for name, sql_type in columns.items():
+        if name in existing:
+            continue
+        stmts.append(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {sql_type}"))
+
+    if not stmts:
+        return
+
+    with engine.begin() as conn:
+        for stmt in stmts:
+            conn.execute(stmt)
+
+
 @app.middleware("http")
 async def prometheus_latency_middleware(request, call_next):
     start = time.perf_counter()
@@ -119,6 +149,31 @@ def startup_event() -> None:
 
     # create tables
     Base.metadata.create_all(bind=engine)
+
+    # ensure schema is compatible with current PredictionORM
+    _ensure_columns(
+        "predictions",
+        {
+            # Raw vitals columns (nullable)
+            "heart_rate": "DOUBLE PRECISION",
+            "systolic_bp": "DOUBLE PRECISION",
+            "diastolic_bp": "DOUBLE PRECISION",
+            "temperature": "DOUBLE PRECISION",
+            "spo2": "DOUBLE PRECISION",
+            "respiratory_rate": "DOUBLE PRECISION",
+            "lactate": "DOUBLE PRECISION",
+            "wbc": "DOUBLE PRECISION",
+            "creatinine": "DOUBLE PRECISION",
+            "bilirubin": "DOUBLE PRECISION",
+            "platelet": "DOUBLE PRECISION",
+            # Early warning columns (nullable)
+            "early_warning_probability": "DOUBLE PRECISION",
+            "early_warning_level": "VARCHAR(16)",
+            "trend_score": "DOUBLE PRECISION",
+            "rate_of_change_score": "DOUBLE PRECISION",
+            "threshold_score": "DOUBLE PRECISION",
+        },
+    )
 
 
 @app.post("/vitals", response_model=PredictionResponse)

@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from prometheus_client import Gauge, generate_latest
 from starlette.responses import Response
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine, func
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine, func, inspect, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -61,6 +61,29 @@ manager = ConnectionManager()
 active_alerts_gauge = Gauge("active_alerts", "Number of active (unacknowledged) alerts")
 
 
+def _ensure_columns(table: str, columns: Dict[str, str]) -> None:
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table(table):
+            return
+        existing = {c.get("name") for c in inspector.get_columns(table)}
+    except Exception:
+        return
+
+    stmts = []
+    for name, sql_type in columns.items():
+        if name in existing:
+            continue
+        stmts.append(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {sql_type}"))
+
+    if not stmts:
+        return
+
+    with engine.begin() as conn:
+        for stmt in stmts:
+            conn.execute(stmt)
+
+
 @app.get("/health")
 async def health() -> Dict[str, str]:
     return {"status": "ok"}
@@ -82,6 +105,15 @@ async def metrics() -> Response:
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
+
+    _ensure_columns(
+        "alerts",
+        {
+            "acknowledged": "BOOLEAN DEFAULT FALSE",
+            "ack_by": "VARCHAR(128)",
+            "ack_at": "TIMESTAMPTZ",
+        },
+    )
 
 
 def _to_response(row: AlertORM) -> AlertResponse:

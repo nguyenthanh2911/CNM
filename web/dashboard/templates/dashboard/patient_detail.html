@@ -52,8 +52,8 @@
       </div>
       <div class="progress mb-3" style="height: 20px;">
         <div class="progress-bar bg-{{ ew_badge_color }}"
-             style="width: {{ ew_probability_pct }}%">
-          {{ ew_probability_pct }}%
+             style="width: {{ ew_probability_pct|default:0|floatformat:0 }}%;">
+          {{ ew_probability_pct|default:0 }}%
         </div>
       </div>
     </div>
@@ -64,7 +64,7 @@
         <div class="fw-bold">{{ ew_trend_pct }}%</div>
         <div class="progress" style="height:6px">
           <div class="progress-bar bg-warning"
-               style="width: {{ ew_trend_pct }}%;"></div>
+               style="width: {{ ew_trend_pct|default:0|floatformat:0 }}%;"></div>
         </div>
       </div>
       <div class="col-4">
@@ -72,7 +72,7 @@
         <div class="fw-bold">{{ ew_roc_pct }}%</div>
         <div class="progress" style="height:6px">
           <div class="progress-bar bg-warning"
-               style="width: {{ ew_roc_pct }}%;"></div>
+               style="width: {{ ew_roc_pct|default:0|floatformat:0 }}%;"></div>
         </div>
       </div>
       <div class="col-4">
@@ -80,7 +80,7 @@
         <div class="fw-bold">{{ ew_thresh_pct }}%</div>
         <div class="progress" style="height:6px">
           <div class="progress-bar bg-warning"
-               style="width: {{ ew_thresh_pct }}%;"></div>
+               style="width: {{ ew_thresh_pct|default:0|floatformat:0 }}%;"></div>
         </div>
       </div>
     </div>
@@ -114,7 +114,7 @@
       <div class="card-header">Top 5 SHAP features</div>
       <div class="card-body">
         <canvas id="shapChart" height="160"></canvas>
-                {% if not shap_features_json or shap_features_json == "[]" %}
+        {% if not shap_features_json or shap_features_json == "[]" %}
           <div class="text-muted small mt-2">Chưa có dữ liệu SHAP</div>
         {% endif %}
       </div>
@@ -155,8 +155,11 @@
   </div>
 </div>
 
+{{ risk_series_json|default:"[]"|json_script:"risk-data" }}
+{{ shap_features_json|default:"[]"|json_script:"shap-data" }}
+
 <script>
-  const riskSeries = {{ risk_series_json|safe }};
+  const riskSeries = JSON.parse(document.getElementById('risk-data').textContent);
   const labels = riskSeries.map(p => p.t);
   const data = riskSeries.map(p => p.risk);
 
@@ -181,11 +184,11 @@
     }
   });
 
-  const shap = {{ shap_features_json|safe }};
+  const shap = JSON.parse(document.getElementById('shap-data').textContent);
   const shapLabels = shap.map(x => x.feature);
   const shapValues = shap.map(x => x.shap_value);
 
-    new Chart(document.getElementById('shapChart'), {
+  new Chart(document.getElementById('shapChart'), {
     type: 'bar',
     data: {
       labels: shapLabels,
@@ -211,7 +214,7 @@
   let refreshTimer = setTimeout(() => location.reload(), REFRESH_MS);
 
   // ── WebSocket realtime alert ───────────────────────────────────────
-    const patientId = "{{ patient_id }}";
+  const patientId = "{{ patient_id }}";
   const wsUrl = "ws://" + location.host.replace('8000','8002') + "/ws/" + patientId;
 
   function connectWS() {
@@ -222,14 +225,12 @@
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === "CRITICAL_ALERT" && msg.data.patient_id === patientId) {
-        // Reset timer và reload ngay
         clearTimeout(refreshTimer);
         setTimeout(() => location.reload(), 300);
       }
     };
 
     ws.onclose = () => {
-      // Reconnect sau 5 giây nếu mất kết nối
       setTimeout(connectWS, 5000);
     };
   }
