@@ -17,7 +17,9 @@ from ml.explain import SepsisExplainer
 from ml.mlflow_utils import load_production_model_with_metadata
 from ml.models.xgboost_model import SepsisXGBModel
 
-from .schemas import FeatureExplanation, PredictionResponse, VitalRequest
+from ml.early_warning import EarlyWarningPredictor
+
+from .schemas import EarlyWarningResult, FeatureExplanation, PredictionResponse, VitalRequest
 
 
 FEATURE_COLS = [
@@ -47,6 +49,7 @@ class SepsisPredictor:
         mlflow.set_tracking_uri(mlflow_uri)
 
         self._artifacts = self._load_artifacts()
+        self._ew_predictor = EarlyWarningPredictor()
 
     @classmethod
     def get_instance(cls) -> "SepsisPredictor":
@@ -205,6 +208,29 @@ class SepsisPredictor:
             "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
         }
 
+        # Early warning (30 phút)
+        ew_result = self._ew_predictor.predict_early_warning(
+            patient_id=patient_id,
+            current_vitals={
+                'heart_rate':       vital_request.heart_rate,
+                'systolic_bp':      vital_request.systolic_bp,
+                'diastolic_bp':     vital_request.diastolic_bp,
+                'temperature':      vital_request.temperature,
+                'spo2':             vital_request.spo2,
+                'respiratory_rate': vital_request.respiratory_rate,
+                'lactate':          vital_request.lactate,
+                'wbc':              vital_request.wbc,
+                'creatinine':       vital_request.creatinine,
+                'bilirubin':        vital_request.bilirubin,
+                'platelet':         vital_request.platelet,
+            }
+        )
+        early_warning = EarlyWarningResult(**ew_result)
+
+        # Alert sớm nếu early_warning HIGH nhưng chưa CRITICAL
+        if early_warning.early_warning_level == "HIGH" and risk_level != "CRITICAL":
+            pass  # Có thể gửi alert riêng ở main.py
+
         return PredictionResponse(
             patient_id=patient_id,
             timestamp=ts,
@@ -215,10 +241,22 @@ class SepsisPredictor:
             sofa_score=int(sofa_score),
             news2_score=int(news2_score),
             inference_time_ms=float(inference_time_ms),
+            early_warning=early_warning,
         )
 
     def get_history(self, patient_id: str) -> Dict[str, Any]:
+        vitals = getattr(self, "_vitals_cache", {}).get(patient_id, {})
+        # Lấy early warning mới nhất từ predictor
+        ew = None
+        if hasattr(self, '_ew_predictor') and vitals:
+            try:
+                ew = self._ew_predictor.predict_early_warning(
+                    patient_id, vitals
+                )
+            except Exception:
+                ew = None
         return {
-            "latest_vitals": getattr(self, "_vitals_cache", {}).get(patient_id, {}),
-            "top_features": getattr(self, "_shap_cache", {}).get(patient_id, [])
+            "latest_vitals": vitals,
+            "top_features": getattr(self, "_shap_cache", {}).get(patient_id, []),
+            "early_warning": ew,
         }

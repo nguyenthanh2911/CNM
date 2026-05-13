@@ -56,6 +56,13 @@ class PredictionORM(Base):
     bilirubin = Column(Float, nullable=True)
     platelet = Column(Float, nullable=True)
 
+    # THÊM MỚI — early warning scores
+    early_warning_probability = Column(Float, nullable=True)
+    early_warning_level       = Column(String(16), nullable=True)
+    trend_score               = Column(Float, nullable=True)
+    rate_of_change_score      = Column(Float, nullable=True)
+    threshold_score           = Column(Float, nullable=True)
+
     created_at = Column(DateTime(timezone=True), nullable=False)
 
 
@@ -155,6 +162,12 @@ async def post_vitals(payload: VitalRequest) -> PredictionResponse:
             creatinine=payload.creatinine,
             bilirubin=payload.bilirubin,
             platelet=payload.platelet,
+            # THÊM MỚI — early warning scores
+            early_warning_probability=result.early_warning.early_warning_probability,
+            early_warning_level=result.early_warning.early_warning_level,
+            trend_score=result.early_warning.trend_score,
+            rate_of_change_score=result.early_warning.rate_of_change_score,
+            threshold_score=result.early_warning.threshold_score,
             created_at=now,
         )
         db.add(row)
@@ -162,12 +175,14 @@ async def post_vitals(payload: VitalRequest) -> PredictionResponse:
     finally:
         db.close()
 
-    # alert service call
+        # alert service call
     alert_url = os.getenv("ALERT_SERVICE_URL", "http://alert_service:8002/alerts")
+
+    # Gửi alert cho sepsis CRITICAL
     if result.alert_triggered:
         async with httpx.AsyncClient(timeout=5.0) as client:
             try:
-                                await client.post(
+                await client.post(
                     alert_url,
                     json={
                         "patient_id": result.patient_id,
@@ -180,6 +195,28 @@ async def post_vitals(payload: VitalRequest) -> PredictionResponse:
                 )
             except Exception:
                 # Do not fail inference if alert service is down
+                pass
+
+    # Gửi alert sớm khi early_warning HIGH nhưng chưa CRITICAL
+    if result.early_warning.early_warning_level == "HIGH" and not result.alert_triggered:
+        ew_msg = (
+            f"Nguy cơ sepsis {result.early_warning.early_warning_probability*100:.0f}% "
+            f"trong 30 phút tới"
+        )
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            try:
+                await client.post(
+                    alert_url,
+                    json={
+                        "patient_id": result.patient_id,
+                        "risk_score": float(result.early_warning.early_warning_probability),
+                        "risk_level": "EARLY_WARNING",
+                        "top_features": [],
+                        "sofa_score": 0,
+                        "news2_score": 0,
+                    },
+                )
+            except Exception:
                 pass
 
     return result

@@ -36,7 +36,11 @@ VALID_VITALS_PAYLOAD = {
 
 def _make_mock_predictor(risk_score: float = 0.25):
     """Return a MagicMock that mimics SepsisPredictor for a given risk score."""
-    from services.ml_service.schemas import FeatureExplanation, PredictionResponse
+    from services.ml_service.schemas import (
+        EarlyWarningResult,
+        FeatureExplanation,
+        PredictionResponse,
+    )
 
     if risk_score < 0.3:
         level = "LOW"
@@ -55,6 +59,15 @@ def _make_mock_predictor(risk_score: float = 0.25):
         sofa_score=2,
         news2_score=3,
         inference_time_ms=45.0,
+        early_warning=EarlyWarningResult(
+            early_warning_probability=0.15,
+            early_warning_level="LOW",
+            time_window_minutes=30,
+            trend_score=0.1,
+            rate_of_change_score=0.05,
+            threshold_score=0.2,
+            contributing_factors=[],
+        ),
     )
 
     mock_predictor = MagicMock()

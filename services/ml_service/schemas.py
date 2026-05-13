@@ -29,6 +29,16 @@ class FeatureExplanation(BaseModel):
     shap_value: float
 
 
+class EarlyWarningResult(BaseModel):
+    early_warning_probability: float    # 0.0 - 1.0
+    early_warning_level: str            # LOW / MEDIUM / HIGH
+    time_window_minutes: int            # = 30
+    trend_score: float
+    rate_of_change_score: float
+    threshold_score: float
+    contributing_factors: List[str]
+
+
 class PredictionResponse(BaseModel):
     patient_id: str
     timestamp: datetime
@@ -39,6 +49,7 @@ class PredictionResponse(BaseModel):
     sofa_score: int
     news2_score: int
     inference_time_ms: float
+    early_warning: EarlyWarningResult    # THÊM MỚI
 
 
 class HealthResponse(BaseModel):
@@ -49,3 +60,4 @@ class HealthResponse(BaseModel):
     model_version: str
     model_auroc: float
     uptime_seconds: float
+

@@ -128,7 +128,7 @@ def patient_detail(request: HttpRequest, patient_id: str) -> HttpResponse:
         if alert and isinstance(alert.top_features, list):
             shap_features = alert.top_features[:5]
 
-    # Determine current risk
+        # Determine current risk
     risk_score = float(latest_pred.risk_score) if latest_pred else 0.0
     level = _risk_badge(latest_pred.risk_level) if latest_pred else "STABLE"
 
@@ -138,6 +138,52 @@ def patient_detail(request: HttpRequest, patient_id: str) -> HttpResponse:
         .order_by("-created_at")
         .first()
     )
+
+    # --- Lấy early warning từ ML service history ---
+    early_warning = None
+    try:
+        with httpx.Client(timeout=3.0) as client:
+            resp = client.get(f"{ml_url}/vitals/{patient_id}/history")
+            if resp.status_code == 200:
+                payload = resp.json()
+                ew_data = payload.get("early_warning")
+                if ew_data:
+                    early_warning = ew_data
+    except Exception:
+        pass
+
+    # Fallback: lấy từ DB predictions mới nhất
+    if not early_warning and latest_pred:
+        if hasattr(latest_pred, 'early_warning_probability'):
+            early_warning = {
+                "early_warning_probability": float(latest_pred.early_warning_probability or 0),
+                "early_warning_level": str(latest_pred.early_warning_level or "LOW"),
+                "trend_score": float(latest_pred.trend_score or 0),
+                "rate_of_change_score": float(latest_pred.rate_of_change_score or 0),
+                "threshold_score": float(latest_pred.threshold_score or 0),
+                "contributing_factors": [],
+                "time_window_minutes": 30,
+            }
+
+    # Tính các giá trị phần trăm và màu sắc cho template
+    ew_prob = 0.0
+    ew_level = "LOW"
+    if early_warning:
+        ew_prob = float(early_warning.get("early_warning_probability", 0))
+        ew_level = str(early_warning.get("early_warning_level", "LOW"))
+
+    if ew_level == "HIGH":
+        ew_badge_color = "danger"
+        ew_border_color = "danger"
+        ew_text_color = "danger"
+    elif ew_level == "MEDIUM":
+        ew_badge_color = "warning"
+        ew_border_color = "warning"
+        ew_text_color = "warning"
+    else:
+        ew_badge_color = "success"
+        ew_border_color = "success"
+        ew_text_color = "success"
 
     return render(
         request,
@@ -152,6 +198,15 @@ def patient_detail(request: HttpRequest, patient_id: str) -> HttpResponse:
             "shap_features_json": mark_safe(json.dumps(shap_features, ensure_ascii=False)),
             "vitals": vitals,
             "pending_alert": pending_alert,
+            # Early warning context
+            "early_warning": early_warning,
+            "ew_probability_pct": int(ew_prob * 100),
+            "ew_trend_pct": int(float(early_warning.get("trend_score", 0)) * 100) if early_warning else 0,
+            "ew_roc_pct": int(float(early_warning.get("rate_of_change_score", 0)) * 100) if early_warning else 0,
+            "ew_thresh_pct": int(float(early_warning.get("threshold_score", 0)) * 100) if early_warning else 0,
+            "ew_badge_color": ew_badge_color,
+            "ew_border_color": ew_border_color,
+            "ew_text_color": ew_text_color,
         },
     )
 
