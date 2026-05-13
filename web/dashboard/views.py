@@ -8,9 +8,10 @@ from typing import Any, Dict, List, Optional
 import httpx
 from django.conf import settings
 from django.db.models import QuerySet
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.safestring import mark_safe
+from django.views.decorators.http import require_GET
 
 from .models import Alert, Prediction
 
@@ -68,6 +69,84 @@ def patient_list(request: HttpRequest) -> HttpResponse:
             "warning": warning,
             "stable": stable,
         },
+    )
+
+
+@require_GET
+def api_dashboard_data(request: HttpRequest) -> JsonResponse:
+    """JSON API trả về dữ liệu dashboard mới nhất – dùng cho AJAX polling."""
+    latest: QuerySet[Prediction] = Prediction.objects.order_by("patient_id", "-timestamp").distinct("patient_id")
+
+    patients: List[Dict[str, Any]] = []
+    critical = 0
+    warning = 0
+
+    for row in latest:
+        badge = _risk_badge(row.risk_level)
+        if badge == "CRITICAL":
+            critical += 1
+        elif badge == "WARNING":
+            warning += 1
+
+        digits = "".join([c for c in row.patient_id if c.isdigit()])
+        room = f"ICU-{int(digits or 0) % 10:02d}"
+
+        patients.append(
+            {
+                "patient_id": row.patient_id,
+                "name": f"Patient {row.patient_id}",
+                "room": room,
+                "risk_score": round(float(row.risk_score), 4),
+                "risk_pct": round(float(row.risk_score) * 100.0, 1),
+                "risk_level": badge,
+                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+            }
+        )
+
+    total = len(patients)
+    stable = max(total - critical - warning, 0)
+
+    return JsonResponse(
+        {
+            "total": total,
+            "critical": critical,
+            "warning": warning,
+            "stable": stable,
+            "patients": patients,
+        }
+    )
+
+
+@require_GET
+def api_patient_detail(request: HttpRequest, patient_id: str) -> JsonResponse:
+    """JSON API trả về dữ liệu chi tiết của 1 bệnh nhân – dùng cho AJAX polling trang detail."""
+    qs = Prediction.objects.filter(patient_id=patient_id).order_by("-timestamp")[:24]
+    records = list(reversed(list(qs)))
+
+    risk_series = [
+        {
+            "t": r.timestamp.isoformat(),
+            "risk": round(float(r.risk_score), 4),
+            "level": _risk_badge(r.risk_level),
+            "sofa": int(r.sofa_score),
+            "news2": int(r.news2_score),
+        }
+        for r in records
+    ]
+
+    latest_pred = records[-1] if records else None
+    risk_score = round(float(latest_pred.risk_score), 4) if latest_pred else 0.0
+    level = _risk_badge(latest_pred.risk_level) if latest_pred else "STABLE"
+
+    return JsonResponse(
+        {
+            "patient_id": patient_id,
+            "risk_score": risk_score,
+            "risk_level": level,
+            "sofa_score": int(latest_pred.sofa_score) if latest_pred else 0,
+            "news2_score": int(latest_pred.news2_score) if latest_pred else 0,
+            "risk_series": risk_series,
+        }
     )
 
 

@@ -1,118 +1,313 @@
 {% extends "dashboard/base.html" %}
-
 {% block content %}
-<div class="row g-3 mb-3">
-  <div class="col-md-3">
-    <div class="card">
+
+<style>
+/* === Live bar === */
+.live-bar {
+  display:flex; align-items:center; gap:14px;
+  background:#0f172a; color:#e2e8f0;
+  padding:9px 18px; border-radius:10px; margin-bottom:20px;
+  font-size:.84rem; font-weight:500;
+}
+.live-dot {
+  width:10px; height:10px; border-radius:50%;
+  background:#22c55e; flex-shrink:0;
+  animation:pulse-green 1.6s infinite;
+}
+@keyframes pulse-green {
+  0%  { box-shadow:0 0 0 0   rgba(34,197,94,.7); }
+  70% { box-shadow:0 0 0 9px rgba(34,197,94,0);  }
+  100%{ box-shadow:0 0 0 0   rgba(34,197,94,0);  }
+}
+.live-label { font-weight:800; color:#4ade80; letter-spacing:.1em; font-size:.82rem; }
+.live-sep   { color:#334155; }
+.live-err   { color:#f87171; font-size:.8rem; display:none; }
+
+/* === Stat cards === */
+.stat-card { border-radius:12px; transition:box-shadow .2s; }
+.stat-card:hover { box-shadow:0 6px 20px rgba(0,0,0,.12); }
+.stat-num { font-size:2rem; font-weight:800; line-height:1; }
+
+/* === Table === */
+.row-critical { background:rgba(220,53,69,.05); }
+.row-critical:hover { background:rgba(220,53,69,.1) !important; }
+
+.critical-dot {
+  display:inline-block; width:8px; height:8px;
+  border-radius:50%; background:#dc3545;
+  margin-right:5px; vertical-align:middle;
+  animation:pulse-red 1.2s infinite;
+}
+@keyframes pulse-red {
+  0%  { box-shadow:0 0 0 0   rgba(220,53,69,.8); }
+  70% { box-shadow:0 0 0 7px rgba(220,53,69,0);  }
+  100%{ box-shadow:0 0 0 0   rgba(220,53,69,0);  }
+}
+.progress { height:10px; border-radius:6px; background:#e2e8f0; }
+.progress-bar { transition:width .5s ease, background-color .35s ease; border-radius:6px; }
+
+/* === Toast === */
+#toast-wrap {
+  position:fixed; bottom:22px; right:22px;
+  z-index:9999; display:flex; flex-direction:column; gap:8px;
+  pointer-events:none;
+}
+.icu-toast {
+  background:#dc3545; color:#fff;
+  padding:11px 18px; border-radius:9px;
+  font-size:.875rem; font-weight:600;
+  box-shadow:0 5px 22px rgba(0,0,0,.28);
+  pointer-events:auto; max-width:320px;
+  animation:toast-in .3s ease;
+}
+@keyframes toast-in { from{transform:translateX(110%);opacity:0} to{transform:translateX(0);opacity:1} }
+.icu-toast.out { animation:toast-out .45s ease forwards; }
+@keyframes toast-out { to{transform:translateX(30px);opacity:0} }
+</style>
+
+<!-- Live status bar -->
+<div class="live-bar">
+  <span class="live-dot"></span>
+  <span class="live-label">LIVE REAL-TIME</span>
+  <span class="live-sep">|</span>
+  <span class="live-sep">|</span>
+  <span>Last update:&nbsp;<strong id="last-update">--:--:--</strong></span>
+  <span class="live-err" id="live-err">⚠ Mất kết nối realtime</span>
+</div>
+
+<!-- Summary cards -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100">
       <div class="card-body">
-        <div class="text-muted">Tổng bệnh nhân</div>
-        <div class="fs-3 fw-bold">{{ total }}</div>
+        <div class="text-muted small mb-2">Tổng bệnh nhân</div>
+        <div class="stat-num" id="cnt-total">{{ total }}</div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card border-danger">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card border-danger h-100">
       <div class="card-body">
-        <div class="text-muted">CRITICAL</div>
-        <div class="fs-3 fw-bold text-danger">{{ critical }}</div>
+        <div class="text-muted small mb-2">CRITICAL</div>
+        <div class="stat-num text-danger" id="cnt-critical">{{ critical }}</div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card border-warning">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card border-warning h-100">
       <div class="card-body">
-        <div class="text-muted">WARNING</div>
-        <div class="fs-3 fw-bold text-warning">{{ warning }}</div>
+        <div class="text-muted small mb-2">WARNING</div>
+        <div class="stat-num text-warning" id="cnt-warning">{{ warning }}</div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card border-success">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card border-success h-100">
       <div class="card-body">
-        <div class="text-muted">STABLE</div>
-        <div class="fs-3 fw-bold text-success">{{ stable }}</div>
+        <div class="text-muted small mb-2">STABLE</div>
+        <div class="stat-num text-success" id="cnt-stable">{{ stable }}</div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="card">
-  <div class="card-header">Danh sách bệnh nhân</div>
+<!-- Patient table -->
+<div class="card shadow-sm">
+  <div class="card-header d-flex align-items-center justify-content-between py-2">
+    <span class="fw-semibold">Danh sách bệnh nhân</span>
+    <span class="badge bg-secondary" id="cnt-badge">{{ total }} bệnh nhân</span>
+  </div>
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
-      <thead>
+      <thead class="table-light">
         <tr>
           <th>ID</th>
           <th>Tên</th>
           <th>Phòng</th>
-          <th style="min-width: 180px;">Risk Score</th>
+          <th style="min-width:200px">Risk Score</th>
           <th>Mức độ</th>
           <th></th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="pt-tbody">
         {% for p in patients %}
-          <tr>
-            <td class="fw-semibold">{{ p.patient_id }}</td>
-            <td>{{ p.name }}</td>
-            <td>{{ p.room }}</td>
-            <td>
-              <div class="progress" role="progressbar" aria-label="risk" aria-valuenow="{{ p.risk_score|floatformat:2 }}" aria-valuemin="0" aria-valuemax="1">
-                {% if p.risk_level == 'CRITICAL' %}
-                <div class="progress-bar bg-danger" style="width: {{ p.risk_pct|floatformat:0 }}%;"></div>
-                {% elif p.risk_level == 'WARNING' %}
-                  <div class="progress-bar bg-warning" style="width: {{ p.risk_pct|floatformat:0 }}%;"></div>
-                {% else %}
-                  <div class="progress-bar bg-success" style="width: {{ p.risk_pct|floatformat:0 }}%;"></div>
-                {% endif %}
-              </div>
-              <div class="small text-muted mt-1">{{ p.risk_score|floatformat:3 }}</div>
-            </td>
-            <td>
-              {% if p.risk_level == 'CRITICAL' %}
-                <span class="badge bg-danger">CRITICAL</span>
-              {% elif p.risk_level == 'WARNING' %}
-                <span class="badge bg-warning text-dark">WARNING</span>
-              {% else %}
-                <span class="badge bg-success">STABLE</span>
-              {% endif %}
-            </td>
-            <td class="text-end">
-              <a class="btn btn-sm btn-outline-primary" href="/patients/{{ p.patient_id }}/">Xem</a>
-            </td>
-          </tr>
+        <tr data-pid="{{ p.patient_id }}"
+            class="{% if p.risk_level == 'CRITICAL' %}row-critical{% endif %}">
+          <td class="fw-semibold">
+            {% if p.risk_level == 'CRITICAL' %}<span class="critical-dot"></span>{% endif %}{{ p.patient_id }}
+          </td>
+          <td>{{ p.name }}</td>
+          <td>{{ p.room }}</td>
+          <td>
+            <div class="progress">
+              <div class="progress-bar
+                {% if p.risk_level == 'CRITICAL' %}bg-danger
+                {% elif p.risk_level == 'WARNING' %}bg-warning
+                {% else %}bg-success{% endif %}"
+                style="width:{{ p.risk_pct|floatformat:0 }}%"></div>
+            </div>
+            <div class="small text-muted mt-1">{{ p.risk_score|floatformat:3 }}</div>
+          </td>
+          <td>
+            {% if p.risk_level == 'CRITICAL' %}
+              <span class="badge bg-danger">CRITICAL</span>
+            {% elif p.risk_level == 'WARNING' %}
+              <span class="badge bg-warning text-dark">WARNING</span>
+            {% else %}
+              <span class="badge bg-success">STABLE</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-primary" href="/patients/{{ p.patient_id }}/">Xem</a>
+          </td>
+        </tr>
         {% empty %}
-          <tr><td colspan="6" class="text-center text-muted py-4">Chưa có dữ liệu</td></tr>
+        <tr id="empty-row">
+          <td colspan="6" class="text-center text-muted py-4">Chưa có dữ liệu</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
 
+<!-- Toast container -->
+<div id="toast-wrap"></div>
+
 <script>
-  const REFRESH_MS = 15000;
-  let refreshTimer = setTimeout(() => location.reload(), REFRESH_MS);
+(function () {
+  'use strict';
 
-  const wsUrl = `ws://${location.host.replace('8000','8002')}/ws/all`;
-
-  function connectWS() {
-    const ws = new WebSocket(wsUrl);
-
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.type === "CRITICAL_ALERT") {
-        // Highlight row bệnh nhân có alert mới
-        const rows = document.querySelectorAll(`[data-patient-id="${msg.data.patient_id}"]`);
-        rows.forEach(r => r.style.outline = "2px solid red");
-        // Reload sau 1.5 giây để cập nhật risk score
-        clearTimeout(refreshTimer);
-        refreshTimer = setTimeout(() => location.reload(), 1500);
-      }
-    };
-
-    ws.onclose = () => setTimeout(connectWS, 5000);
+  /* ── helpers ── */
+  function barCls(lvl) {
+    return lvl === 'CRITICAL' ? 'bg-danger' : lvl === 'WARNING' ? 'bg-warning' : 'bg-success';
+  }
+  function badgeHtml(lvl) {
+    if (lvl === 'CRITICAL') return '<span class="badge bg-danger">CRITICAL</span>';
+    if (lvl === 'WARNING')  return '<span class="badge bg-warning text-dark">WARNING</span>';
+    return '<span class="badge bg-success">STABLE</span>';
+  }
+  function dotHtml(lvl) {
+    return lvl === 'CRITICAL' ? '<span class="critical-dot"></span>' : '';
+  }
+  function nowHHmmss() {
+    return new Date().toTimeString().slice(0, 8);
   }
 
-  connectWS();
+  /* ── toast ── */
+  function toast(msg) {
+    var wrap = document.getElementById('toast-wrap');
+    var el = document.createElement('div');
+    el.className = 'icu-toast';
+    el.textContent = '🚨 ' + msg;
+    wrap.appendChild(el);
+    setTimeout(function () {
+      el.classList.add('out');
+      el.addEventListener('animationend', function () { el.remove(); });
+    }, 5000);
+  }
+
+  /* ── previous levels – seed from server-rendered HTML ── */
+  var prevLevel = {};
+  document.querySelectorAll('#pt-tbody tr[data-pid]').forEach(function (tr) {
+    var b = tr.querySelector('.badge');
+    if (b) prevLevel[tr.dataset.pid] = b.textContent.trim();
+  });
+
+  /* ── update a single existing row ── */
+  function updateRow(tr, p) {
+    tr.className = p.risk_level === 'CRITICAL' ? 'row-critical' : '';
+    tr.cells[0].innerHTML = dotHtml(p.risk_level) + p.patient_id;
+    tr.cells[2].textContent = p.room;
+    var bar = tr.querySelector('.progress-bar');
+    if (bar) {
+      bar.style.width = p.risk_pct + '%';
+      bar.className = 'progress-bar ' + barCls(p.risk_level);
+    }
+    var scoreEl = tr.querySelector('.small.text-muted');
+    if (scoreEl) scoreEl.textContent = p.risk_score.toFixed(3);
+    tr.cells[4].innerHTML = badgeHtml(p.risk_level);
+  }
+
+  /* ── build a new row ── */
+  function buildRow(p) {
+    var tr = document.createElement('tr');
+    tr.dataset.pid = p.patient_id;
+    tr.className = p.risk_level === 'CRITICAL' ? 'row-critical' : '';
+    tr.innerHTML =
+      '<td class="fw-semibold">' + dotHtml(p.risk_level) + p.patient_id + '</td>' +
+      '<td>' + p.name + '</td>' +
+      '<td>' + p.room + '</td>' +
+      '<td>' +
+        '<div class="progress"><div class="progress-bar ' + barCls(p.risk_level) + '" style="width:' + p.risk_pct + '%"></div></div>' +
+        '<div class="small text-muted mt-1">' + p.risk_score.toFixed(3) + '</div>' +
+      '</td>' +
+      '<td>' + badgeHtml(p.risk_level) + '</td>' +
+      '<td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/patients/' + p.patient_id + '/">Xem</a></td>';
+    return tr;
+  }
+
+  /* ── main poll ── */
+  async function poll() {
+    var errEl = document.getElementById('live-err');
+    try {
+      var res = await fetch('/api/dashboard/', { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var d = await res.json();
+
+      /* update counters */
+      document.getElementById('cnt-total').textContent    = d.total;
+      document.getElementById('cnt-critical').textContent = d.critical;
+      document.getElementById('cnt-warning').textContent  = d.warning;
+      document.getElementById('cnt-stable').textContent   = d.stable;
+      document.getElementById('cnt-badge').textContent    = d.total + ' bệnh nhân';
+
+      /* remove empty placeholder row */
+      var emptyRow = document.getElementById('empty-row');
+      if (emptyRow) emptyRow.remove();
+
+      var tbody = document.getElementById('pt-tbody');
+
+      /* index existing rows */
+      var existing = {};
+      tbody.querySelectorAll('tr[data-pid]').forEach(function (tr) {
+        existing[tr.dataset.pid] = tr;
+      });
+
+      var incoming = new Set(d.patients.map(function (p) { return p.patient_id; }));
+
+      /* update / create */
+      d.patients.forEach(function (p) {
+        var prev = prevLevel[p.patient_id];
+        if (prev && prev !== 'CRITICAL' && p.risk_level === 'CRITICAL') {
+          toast('Cảnh báo mới: ' + p.patient_id + ' chuyển sang CRITICAL');
+        }
+        prevLevel[p.patient_id] = p.risk_level;
+
+        if (existing[p.patient_id]) {
+          updateRow(existing[p.patient_id], p);
+        } else {
+          tbody.appendChild(buildRow(p));
+        }
+      });
+
+      /* remove stale rows */
+      Object.keys(existing).forEach(function (pid) {
+        if (!incoming.has(pid)) existing[pid].remove();
+      });
+
+      document.getElementById('last-update').textContent = nowHHmmss();
+      errEl.style.display = 'none';
+
+    } catch (err) {
+      console.warn('[realtime] poll failed:', err);
+      errEl.style.display = 'inline';
+    }
+  }
+
+  /* kick off */
+  poll();
+  setInterval(poll, 1000);
+}());
 </script>
 {% endblock %}
