@@ -11,10 +11,24 @@ from mlflow.tracking import MlflowClient
 
 
 def get_or_create_experiment(name: str) -> str:
-    exp = mlflow.get_experiment_by_name(name)
-    if exp is not None:
-        return exp.experiment_id
-    return mlflow.create_experiment(name)
+    """Return an active experiment id.
+
+    MLflow can keep experiments in lifecycle stage "deleted".
+    In that case, `mlflow.set_experiment(name)` will raise.
+    We restore the experiment so logging can proceed.
+    """
+    client = MlflowClient()
+
+    # Prefer client API here because it exposes lifecycle_stage reliably
+    exp = client.get_experiment_by_name(name)
+    if exp is None:
+        return client.create_experiment(name)
+
+    # If deleted, restore so it can be set/used again
+    if getattr(exp, "lifecycle_stage", None) == "deleted":
+        client.restore_experiment(exp.experiment_id)
+
+    return exp.experiment_id
 
 
 def log_training_run(
@@ -27,7 +41,6 @@ def log_training_run(
 ) -> str:
     if experiment_name:
         exp_id = get_or_create_experiment(experiment_name)
-        mlflow.set_experiment(experiment_name)
     else:
         exp_id = None
 
