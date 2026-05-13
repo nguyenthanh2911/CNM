@@ -34,6 +34,12 @@ def patient_list(request: HttpRequest) -> HttpResponse:
 
     for row in latest:
         badge = _risk_badge(row.risk_level)
+
+        # Nếu chưa CRITICAL nhưng early_warning HIGH → tính vào WARNING
+        ew_level = getattr(row, 'early_warning_level', None) or ''
+        if badge != "CRITICAL" and ew_level == "HIGH":
+            badge = "WARNING"
+
         if badge == "CRITICAL":
             critical += 1
         elif badge == "WARNING":
