@@ -210,9 +210,10 @@ def patient_detail(request: HttpRequest, patient_id: str) -> HttpResponse:
             "ew_trend_pct": int(float(early_warning.get("trend_score", 0)) * 100) if early_warning else 0,
             "ew_roc_pct": int(float(early_warning.get("rate_of_change_score", 0)) * 100) if early_warning else 0,
             "ew_thresh_pct": int(float(early_warning.get("threshold_score", 0)) * 100) if early_warning else 0,
-            "ew_badge_color": ew_badge_color,
+                        "ew_badge_color": ew_badge_color,
             "ew_border_color": ew_border_color,
             "ew_text_color": ew_text_color,
+            "ew_level": ew_level,
         },
     )
 
