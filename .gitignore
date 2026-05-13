@@ -106,3 +106,10 @@ data/processed/
 data/synthetic/
 *.psv
 *.csv
+
+#skill agent
+.continue/
+.github/
+*.copilot-instructions.md
+
+
