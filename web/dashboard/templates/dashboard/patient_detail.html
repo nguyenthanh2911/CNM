@@ -31,70 +31,23 @@
   <span class="badge bg-secondary">NEWS2: {{ news2_score }}</span>
 </div>
 
-<!-- Early Warning Banner — chỉ hiển thị khi >= MEDIUM -->
+<!-- Early Warning Banner -->
 {% if early_warning and ew_level != "LOW" %}
-<div class="card mb-3 border-{{ ew_border_color }}">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center">
-      <h5 class="mb-0">
-        ⏱️ Cảnh báo sớm — 30 phút tới
-      </h5>
-      <span class="badge bg-{{ ew_badge_color }} fs-6">
-        {{ early_warning.early_warning_level }}
-      </span>
+<div class="alert alert-{{ ew_badge_color }} mt-3" role="alert">
+  <h6 class="fw-bold mb-2">⚠ CẢNH BÁO SỚM — Nguy cơ Sepsis trong 30 phút tới</h6>
+  <div class="row g-2 text-center">
+    <div class="col-4">
+      <div class="fw-bold fs-5">{{ ew_probability_pct }}%</div>
+      <small class="text-muted">Xác suất</small>
     </div>
-    <div class="mt-3">
-      <div class="d-flex justify-content-between mb-1">
-        <span>Xác suất sepsis trong 30 phút:</span>
-        <strong class="text-{{ ew_text_color }}">
-          {{ ew_probability_pct }}%
-        </strong>
-      </div>
-      <div class="progress mb-3" style="height: 20px;">
-        <div class="progress-bar bg-{{ ew_badge_color }}"
-             style="width: {{ ew_probability_pct|default:0|floatformat:0 }}%;">
-          {{ ew_probability_pct|default:0 }}%
-        </div>
-      </div>
+    <div class="col-4">
+      <div class="fw-bold fs-5">{{ ew_trend_pct }}%</div>
+      <small class="text-muted">Trend</small>
     </div>
-    <!-- 3 sub-scores -->
-    <div class="row text-center mt-2">
-      <div class="col-4">
-        <small class="text-muted">Xu hướng</small>
-        <div class="fw-bold">{{ ew_trend_pct }}%</div>
-        <div class="progress" style="height:6px">
-          <div class="progress-bar bg-warning"
-               style="width: {{ ew_trend_pct|default:0|floatformat:0 }}%;"></div>
-        </div>
-      </div>
-      <div class="col-4">
-        <small class="text-muted">Tốc độ thay đổi</small>
-        <div class="fw-bold">{{ ew_roc_pct }}%</div>
-        <div class="progress" style="height:6px">
-          <div class="progress-bar bg-warning"
-               style="width: {{ ew_roc_pct|default:0|floatformat:0 }}%;"></div>
-        </div>
-      </div>
-      <div class="col-4">
-        <small class="text-muted">Gần ngưỡng</small>
-        <div class="fw-bold">{{ ew_thresh_pct }}%</div>
-        <div class="progress" style="height:6px">
-          <div class="progress-bar bg-warning"
-               style="width: {{ ew_thresh_pct|default:0|floatformat:0 }}%;"></div>
-        </div>
-      </div>
+    <div class="col-4">
+      <div class="fw-bold fs-5">{{ ew_thresh_pct }}%</div>
+      <small class="text-muted">Threshold</small>
     </div>
-    <!-- Contributing factors -->
-    {% if early_warning.contributing_factors %}
-    <div class="mt-3">
-      <small class="text-muted">Yếu tố nguy cơ:</small>
-      <ul class="mb-0 mt-1">
-        {% for factor in early_warning.contributing_factors %}
-        <li><small>{{ factor }}</small></li>
-        {% endfor %}
-      </ul>
-    </div>
-    {% endif %}
   </div>
 </div>
 {% endif %}
@@ -159,7 +112,8 @@
 {{ shap_features_json|default:"[]"|json_script:"shap-data" }}
 
 <script>
-  const riskSeries = JSON.parse(document.getElementById('risk-data').textContent);
+  const riskSeriesEl = document.getElementById('risk-data');
+  const riskSeries = riskSeriesEl ? JSON.parse(riskSeriesEl.textContent) : [];
   const labels = riskSeries.map(p => p.t);
   const data = riskSeries.map(p => p.risk);
 
