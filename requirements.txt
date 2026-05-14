@@ -13,6 +13,7 @@ duckdb==0.10.1
 pyarrow==15.0.2
 evidently==0.4.16
 prefect==2.19.1
+griffe<1.0.0
 psycopg2-binary==2.9.9
 sqlalchemy==2.0.29
 pydantic==2.6.4
