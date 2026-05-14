@@ -32,9 +32,10 @@ class Prediction(models.Model):
     # Early warning columns
     early_warning_probability = models.FloatField(null=True, blank=True)
     early_warning_level = models.CharField(max_length=16, null=True, blank=True)
-    trend_score = models.FloatField(null=True, blank=True)
-    rate_of_change_score = models.FloatField(null=True, blank=True)
-    threshold_score = models.FloatField(null=True, blank=True)
+    trend_score = models.FloatField(null=True)
+    rate_of_change_score = models.FloatField(null=True)
+    threshold_score = models.FloatField(null=True)
+
 
     created_at = models.DateTimeField()
 
