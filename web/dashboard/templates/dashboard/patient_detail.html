@@ -26,15 +26,11 @@
   </div>
 </div>
 
-<div class="mb-3">
-  <span class="badge bg-secondary">SOFA: {{ sofa_score }}</span>
-  <span class="badge bg-secondary">NEWS2: {{ news2_score }}</span>
-</div>
 
 <!-- Early Warning Banner -->
-{% if early_warning and ew_level != "LOW" %}
+{% if early_warning %}
 <div class="alert alert-{{ ew_badge_color }} mt-3" role="alert">
-  <h6 class="fw-bold mb-2">⚠ CẢNH BÁO SỚM — Nguy cơ Sepsis trong 30 phút tới</h6>
+  <h6 class="fw-bold mb-2">&#9888; CẢNH BÁO SỚM &mdash; Nguy cơ Sepsis trong 30 phút tới</h6>
   <div class="row g-2 text-center">
     <div class="col-4">
       <div class="fw-bold fs-5">{{ ew_probability_pct }}%</div>
@@ -51,6 +47,10 @@
   </div>
 </div>
 {% endif %}
+<div class="mb-3">
+  <span class="badge bg-secondary">SOFA: {{ sofa_score }}</span>
+  <span class="badge bg-secondary">NEWS2: {{ news2_score }}</span>
+</div>
 
 <div class="row g-3">
   <div class="col-lg-8">
@@ -67,7 +67,7 @@
       <div class="card-header">Top 5 SHAP features</div>
       <div class="card-body">
         <canvas id="shapChart" height="160"></canvas>
-        {% if not shap_features_json or shap_features_json == "[]" %}
+        {% if not shap_features %}
           <div class="text-muted small mt-2">Chưa có dữ liệu SHAP</div>
         {% endif %}
       </div>
@@ -79,41 +79,37 @@
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">HR</div>
-      <div class="fs-4 fw-bold">{% if vitals.heart_rate %}{{ vitals.heart_rate|floatformat:0 }} bpm{% else %}-{% endif %}</div>
+      <div class="fs-4 fw-bold">{{ vitals.heart_rate|default:"-" }}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">BP</div>
-      <div class="fs-6 fw-bold">{% if vitals.systolic_bp %}{{ vitals.systolic_bp|floatformat:0 }}/{{ vitals.diastolic_bp|floatformat:0 }} mmHg{% else %}-/-{% endif %}</div>
+      <div class="fs-6 fw-bold">{{ vitals.systolic_bp|default:"-" }} / {{ vitals.diastolic_bp|default:"-" }}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">SpO2</div>
-      <div class="fs-4 fw-bold">{% if vitals.spo2 %}{{ vitals.spo2|floatformat:1 }}%{% else %}-{% endif %}</div>
+      <div class="fs-4 fw-bold">{{ vitals.spo2|default:"-" }}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">Temp</div>
-      <div class="fs-4 fw-bold">{% if vitals.temperature %}{{ vitals.temperature|floatformat:1 }}°C{% else %}-{% endif %}</div>
+      <div class="fs-4 fw-bold">{{ vitals.temperature|default:"-" }}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">RR</div>
-      <div class="fs-4 fw-bold">{% if vitals.respiratory_rate %}{{ vitals.respiratory_rate|floatformat:0 }} /min{% else %}-{% endif %}</div>
+      <div class="fs-4 fw-bold">{{ vitals.respiratory_rate|default:"-" }}</div>
     </div></div>
   </div>
 </div>
 
-{{ risk_series_json|default:"[]"|json_script:"risk-data" }}
-{{ shap_features_json|default:"[]"|json_script:"shap-data" }}
-
 <script>
-  const riskSeriesEl = document.getElementById('risk-data');
-  const riskSeries = riskSeriesEl ? JSON.parse(riskSeriesEl.textContent) : [];
+  const riskSeries = {{ risk_series_json|safe }};
   const labels = riskSeries.map(p => p.t);
   const data = riskSeries.map(p => p.risk);
 
@@ -138,7 +134,7 @@
     }
   });
 
-  const shap = JSON.parse(document.getElementById('shap-data').textContent);
+  const shap = {{ shap_features_json|safe }};
   const shapLabels = shap.map(x => x.feature);
   const shapValues = shap.map(x => x.shap_value);
 
@@ -160,35 +156,5 @@
       }
     }
   });
-</script>
-
-<script>
-  // ── Auto-refresh mỗi 10 giây ──────────────────────────────────────
-  const REFRESH_MS = 10000;
-  let refreshTimer = setTimeout(() => location.reload(), REFRESH_MS);
-
-  // ── WebSocket realtime alert ───────────────────────────────────────
-  const patientId = "{{ patient_id }}";
-  const wsUrl = "ws://" + location.host.replace('8000','8002') + "/ws/" + patientId;
-
-  function connectWS() {
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => console.log("[WS] Connected for", patientId);
-
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.type === "CRITICAL_ALERT" && msg.data.patient_id === patientId) {
-        clearTimeout(refreshTimer);
-        setTimeout(() => location.reload(), 300);
-      }
-    };
-
-    ws.onclose = () => {
-      setTimeout(connectWS, 5000);
-    };
-  }
-
-  connectWS();
 </script>
 {% endblock %}
