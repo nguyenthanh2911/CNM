@@ -4,14 +4,8 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
     <h3 class="mb-1">{{ patient_id }}</h3>
-    {% if risk_level == 'CRITICAL' %}
-      <span class="badge bg-danger">CRITICAL</span>
-    {% elif risk_level == 'WARNING' %}
-      <span class="badge bg-warning text-dark">WARNING</span>
-    {% else %}
-      <span class="badge bg-success">STABLE</span>
-    {% endif %}
-    <span class="ms-2 text-muted">Risk: <span class="fw-bold">{{ risk_score|floatformat:3 }}</span></span>
+    <span id="risk-badge" class="badge {% if risk_level == 'CRITICAL' %}bg-danger{% elif risk_level == 'WARNING' %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ risk_level }}</span>
+    <span class="ms-2 text-muted">Risk: <span id="risk-score" class="fw-bold">{{ risk_score|floatformat:3 }}</span></span>
   </div>
 
   <div>
@@ -29,27 +23,27 @@
 
 <!-- Early Warning Banner -->
 {% if early_warning %}
-<div class="alert alert-{{ ew_badge_color }} mt-3" role="alert">
+<div id="ew-banner" class="alert alert-{{ ew_badge_color }} mt-3" role="alert">
   <h6 class="fw-bold mb-2">&#9888; CẢNH BÁO SỚM &mdash; Nguy cơ Sepsis trong 30 phút tới</h6>
   <div class="row g-2 text-center">
     <div class="col-4">
-      <div class="fw-bold fs-5">{{ ew_probability_pct }}%</div>
+      <div class="fw-bold fs-5"><span id="ew-prob">{{ ew_probability_pct }}</span>%</div>
       <small class="text-muted">Xác suất</small>
     </div>
     <div class="col-4">
-      <div class="fw-bold fs-5">{{ ew_trend_pct }}%</div>
+      <div class="fw-bold fs-5"><span id="ew-trend">{{ ew_trend_pct }}</span>%</div>
       <small class="text-muted">Trend</small>
     </div>
     <div class="col-4">
-      <div class="fw-bold fs-5">{{ ew_thresh_pct }}%</div>
+      <div class="fw-bold fs-5"><span id="ew-thresh">{{ ew_thresh_pct }}</span>%</div>
       <small class="text-muted">Threshold</small>
     </div>
   </div>
 </div>
 {% endif %}
 <div class="mb-3">
-  <span class="badge bg-secondary">SOFA: {{ sofa_score }}</span>
-  <span class="badge bg-secondary">NEWS2: {{ news2_score }}</span>
+  <span id="sofa-badge" class="badge bg-secondary">SOFA: {{ sofa_score }}</span>
+  <span id="news2-badge" class="badge bg-secondary">NEWS2: {{ news2_score }}</span>
 </div>
 
 <div class="row g-3">
@@ -67,9 +61,7 @@
       <div class="card-header">Top 5 SHAP features</div>
       <div class="card-body">
         <canvas id="shapChart" height="160"></canvas>
-        {% if not shap_features %}
-          <div class="text-muted small mt-2">Chưa có dữ liệu SHAP</div>
-        {% endif %}
+        <div id="no-shap-msg" class="text-muted small mt-2">{% if not shap_features %}Chưa có dữ liệu SHAP{% endif %}</div>
       </div>
     </div>
   </div>
@@ -79,82 +71,134 @@
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">HR</div>
-      <div class="fs-4 fw-bold">{{ vitals.heart_rate|default:"-" }}</div>
+      <div id="v-hr" class="fs-4 fw-bold">{{ vitals.heart_rate|default:"-" }}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">BP</div>
-      <div class="fs-6 fw-bold">{{ vitals.systolic_bp|default:"-" }} / {{ vitals.diastolic_bp|default:"-" }}</div>
+      <div id="v-bp" class="fs-6 fw-bold">{{ vitals.systolic_bp|default:"-" }} / {{ vitals.diastolic_bp|default:"-" }}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">SpO2</div>
-      <div class="fs-4 fw-bold">{{ vitals.spo2|default:"-" }}</div>
+      <div id="v-spo2" class="fs-4 fw-bold">{{ vitals.spo2|default:"-" }}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">Temp</div>
-      <div class="fs-4 fw-bold">{{ vitals.temperature|default:"-" }}</div>
+      <div id="v-temp" class="fs-4 fw-bold">{{ vitals.temperature|default:"-" }}</div>
     </div></div>
   </div>
   <div class="col-md-2">
     <div class="card"><div class="card-body">
       <div class="text-muted">RR</div>
-      <div class="fs-4 fw-bold">{{ vitals.respiratory_rate|default:"-" }}</div>
+      <div id="v-rr" class="fs-4 fw-bold">{{ vitals.respiratory_rate|default:"-" }}</div>
     </div></div>
   </div>
 </div>
 
+<script type="application/json" id="risk-series-data">{{ risk_series_json|safe }}</script>
+<script type="application/json" id="shap-data">{{ shap_features_json|safe }}</script>
+<div id="last-updated" class="text-muted small mt-2 mb-1"></div>
+
 <script>
-  const riskSeries = {{ risk_series_json|safe }};
-  const labels = riskSeries.map(p => p.t);
-  const data = riskSeries.map(p => p.risk);
+const patientId = "{{ patient_id }}";
+const POLL_MS = 5000;
 
-  new Chart(document.getElementById('riskChart'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: 'risk_score',
-        data,
-        borderColor: '#0d6efd',
-        backgroundColor: 'rgba(13,110,253,0.1)',
-        tension: 0.2,
-        fill: true,
-      }]
-    },
-    options: {
-      responsive: true,
-      scales: {
-        y: { min: 0, max: 1 }
-      }
+// ── Chart khởi tạo ─────────────────────────────────────
+const riskSeries = JSON.parse(document.getElementById('risk-series-data').textContent);
+
+const riskChart = new Chart(document.getElementById('riskChart'), {
+  type: 'line',
+  data: {
+    labels: riskSeries.map(p => new Date(p.t).toLocaleTimeString()),
+    datasets: [{
+      label: 'risk_score',
+      data: riskSeries.map(p => p.risk),
+      borderColor: '#0d6efd',
+      backgroundColor: 'rgba(13,110,253,0.1)',
+      tension: 0.2,
+      fill: true,
+    }]
+  },
+  options: { responsive: true, scales: { y: { min: 0, max: 1 } } }
+});
+
+const shapData = JSON.parse(document.getElementById('shap-data').textContent);
+const shapChart = new Chart(document.getElementById('shapChart'), {
+  type: 'bar',
+  data: {
+    labels: shapData.map(x => x.feature),
+    datasets: [{ label: 'shap_value', data: shapData.map(x => x.shap_value), backgroundColor: 'rgba(220,53,69,0.35)' }]
+  },
+  options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } }
+});
+
+// ── Polling realtime ────────────────────────────────────
+async function fetchLatest() {
+  try {
+    const resp = await fetch(`/api/patient/${patientId}/latest/`);
+    if (!resp.ok) return;
+    const d = await resp.json();
+
+    // Cập nhật risk badge + score
+    const badge = document.getElementById('risk-badge');
+    const scoreEl = document.getElementById('risk-score');
+    if (badge) { badge.className = 'badge ' + (d.risk_level === 'CRITICAL' ? 'bg-danger' : d.risk_level === 'WARNING' ? 'bg-warning text-dark' : 'bg-success'); badge.textContent = d.risk_level; }
+    if (scoreEl) scoreEl.textContent = parseFloat(d.risk_score).toFixed(3);
+
+    // Cập nhật SOFA / NEWS2
+    const sofa = document.getElementById('sofa-badge');
+    const news2 = document.getElementById('news2-badge');
+    if (sofa) sofa.textContent = 'SOFA: ' + d.sofa_score;
+    if (news2) news2.textContent = 'NEWS2: ' + d.news2_score;
+
+    // Cập nhật Early Warning banner
+    const ew = d.early_warning || {};
+    const ewProb = document.getElementById('ew-prob');
+    const ewTrend = document.getElementById('ew-trend');
+    const ewThresh = document.getElementById('ew-thresh');
+    const ewBanner = document.getElementById('ew-banner');
+    if (ewBanner) {
+      const level = ew.early_warning_level || 'LOW';
+      ewBanner.className = 'alert mt-3 ' + (level === 'HIGH' ? 'alert-danger' : level === 'MEDIUM' ? 'alert-warning' : 'alert-success');
     }
-  });
+    if (ewProb) ewProb.textContent = Math.round((ew.early_warning_probability || 0) * 100) + '%';
+    if (ewTrend) ewTrend.textContent = Math.round((ew.trend_score || 0) * 100) + '%';
+    if (ewThresh) ewThresh.textContent = Math.round((ew.threshold_score || 0) * 100) + '%';
 
-  const shap = {{ shap_features_json|safe }};
-  const shapLabels = shap.map(x => x.feature);
-  const shapValues = shap.map(x => x.shap_value);
+    // Cập nhật vitals cards
+    const vmap = { 'v-hr': d.heart_rate, 'v-bp': (d.systolic_bp||'-') + ' / ' + (d.diastolic_bp||'-'), 'v-spo2': d.spo2, 'v-temp': d.temperature, 'v-rr': d.respiratory_rate };
+    for (const [id, val] of Object.entries(vmap)) { const el = document.getElementById(id); if (el && val !== undefined) el.textContent = typeof val === 'number' ? val.toFixed(2) : val; }
 
-  new Chart(document.getElementById('shapChart'), {
-    type: 'bar',
-    data: {
-      labels: shapLabels,
-      datasets: [{
-        label: 'shap_value',
-        data: shapValues,
-        backgroundColor: 'rgba(220,53,69,0.35)'
-      }]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      plugins: {
-        legend: { display: false }
-      }
+    // Cập nhật risk chart (thêm điểm mới, giữ 24 điểm)
+    if (d.timestamp) {
+      riskChart.data.labels.push(new Date(d.timestamp).toLocaleTimeString());
+      riskChart.data.datasets[0].data.push(d.risk_score);
+      if (riskChart.data.labels.length > 24) { riskChart.data.labels.shift(); riskChart.data.datasets[0].data.shift(); }
+      riskChart.update('none');
     }
-  });
+
+    // Cập nhật SHAP nếu có
+    if (d.shap_features && d.shap_features.length > 0) {
+      shapChart.data.labels = d.shap_features.map(x => x.feature);
+      shapChart.data.datasets[0].data = d.shap_features.map(x => x.shap_value);
+      shapChart.update('none');
+      const noShap = document.getElementById('no-shap-msg');
+      if (noShap) noShap.style.display = 'none';
+    }
+
+    // Timestamp cập nhật
+    const ts = document.getElementById('last-updated');
+    if (ts) ts.textContent = 'Cập nhật lúc: ' + new Date().toLocaleTimeString();
+
+  } catch(e) { console.warn('Poll error:', e); }
+}
+
+setInterval(fetchLatest, POLL_MS);
+fetchLatest();
 </script>
 {% endblock %}
