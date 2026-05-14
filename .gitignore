@@ -99,6 +99,9 @@ data/synthetic/
 mlruns/
 *.parquet
 
+# Model / pipeline artifacts
+artifacts/preprocessor.joblib
+
 
 # Data files
 data/raw/
@@ -106,3 +109,12 @@ data/processed/
 data/synthetic/
 *.psv
 *.csv
+
+#skill agent
+.continue/
+.github/
+*.copilot-instructions.md
+
+
+
+

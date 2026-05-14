@@ -29,6 +29,14 @@ class Prediction(models.Model):
     bilirubin = models.FloatField(null=True, blank=True)
     platelet = models.FloatField(null=True, blank=True)
 
+    # Early warning columns
+    early_warning_probability = models.FloatField(null=True, blank=True)
+    early_warning_level = models.CharField(max_length=16, null=True, blank=True)
+    trend_score = models.FloatField(null=True)
+    rate_of_change_score = models.FloatField(null=True)
+    threshold_score = models.FloatField(null=True)
+
+
     created_at = models.DateTimeField()
 
     class Meta:
@@ -47,6 +55,7 @@ class Alert(models.Model):
     top_features = models.JSONField()
     sofa_score = models.IntegerField()
     news2_score = models.IntegerField()
+    alert_type = models.CharField(max_length=32, default="sepsis")
 
     created_at = models.DateTimeField(db_index=True)
     acknowledged = models.BooleanField(default=False, db_index=True)

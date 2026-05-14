@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import Counter, Histogram
 from prometheus_client.exposition import make_asgi_app
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .predictor import SepsisPredictor
@@ -56,6 +56,13 @@ class PredictionORM(Base):
     bilirubin = Column(Float, nullable=True)
     platelet = Column(Float, nullable=True)
 
+    # THÊM MỚI — early warning scores
+    early_warning_probability = Column(Float, nullable=True)
+    early_warning_level       = Column(String(16), nullable=True)
+    trend_score               = Column(Float, nullable=True)
+    rate_of_change_score      = Column(Float, nullable=True)
+    threshold_score           = Column(Float, nullable=True)
+
     created_at = Column(DateTime(timezone=True), nullable=False)
 
 
@@ -90,6 +97,36 @@ app.mount("/metrics", make_asgi_app())
 _start_time: Optional[float] = None
 
 
+def _ensure_columns(table: str, columns: Dict[str, str]) -> None:
+    """Best-effort schema upgrade for existing tables.
+
+    `create_all()` will not add columns to an existing table. If users reuse a
+    persisted Postgres volume created with an older schema, inserts can fail
+    (while Prometheus metrics still increase), making the Django dashboard look
+    empty. This helper makes upgrades idempotent using `ADD COLUMN IF NOT EXISTS`.
+    """
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table(table):
+            return
+        existing = {c.get("name") for c in inspector.get_columns(table)}
+    except Exception:
+        return
+
+    stmts = []
+    for name, sql_type in columns.items():
+        if name in existing:
+            continue
+        stmts.append(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {sql_type}"))
+
+    if not stmts:
+        return
+
+    with engine.begin() as conn:
+        for stmt in stmts:
+            conn.execute(stmt)
+
+
 @app.middleware("http")
 async def prometheus_latency_middleware(request, call_next):
     start = time.perf_counter()
@@ -112,6 +149,31 @@ def startup_event() -> None:
 
     # create tables
     Base.metadata.create_all(bind=engine)
+
+    # ensure schema is compatible with current PredictionORM
+    _ensure_columns(
+        "predictions",
+        {
+            # Raw vitals columns (nullable)
+            "heart_rate": "DOUBLE PRECISION",
+            "systolic_bp": "DOUBLE PRECISION",
+            "diastolic_bp": "DOUBLE PRECISION",
+            "temperature": "DOUBLE PRECISION",
+            "spo2": "DOUBLE PRECISION",
+            "respiratory_rate": "DOUBLE PRECISION",
+            "lactate": "DOUBLE PRECISION",
+            "wbc": "DOUBLE PRECISION",
+            "creatinine": "DOUBLE PRECISION",
+            "bilirubin": "DOUBLE PRECISION",
+            "platelet": "DOUBLE PRECISION",
+            # Early warning columns (nullable)
+            "early_warning_probability": "DOUBLE PRECISION",
+            "early_warning_level": "VARCHAR(16)",
+            "trend_score": "DOUBLE PRECISION",
+            "rate_of_change_score": "DOUBLE PRECISION",
+            "threshold_score": "DOUBLE PRECISION",
+        },
+    )
 
 
 @app.post("/vitals", response_model=PredictionResponse)
@@ -155,6 +217,12 @@ async def post_vitals(payload: VitalRequest) -> PredictionResponse:
             creatinine=payload.creatinine,
             bilirubin=payload.bilirubin,
             platelet=payload.platelet,
+            # THÊM MỚI — early warning scores
+            early_warning_probability=result.early_warning.early_warning_probability,
+            early_warning_level=result.early_warning.early_warning_level,
+            trend_score=result.early_warning.trend_score,
+            rate_of_change_score=result.early_warning.rate_of_change_score,
+            threshold_score=result.early_warning.threshold_score,
             created_at=now,
         )
         db.add(row)
@@ -162,17 +230,20 @@ async def post_vitals(payload: VitalRequest) -> PredictionResponse:
     finally:
         db.close()
 
-    # alert service call
+        # alert service call
     alert_url = os.getenv("ALERT_SERVICE_URL", "http://alert_service:8002/alerts")
+
+    # Gửi alert cho sepsis CRITICAL
     if result.alert_triggered:
         async with httpx.AsyncClient(timeout=5.0) as client:
             try:
-                                await client.post(
+                await client.post(
                     alert_url,
                     json={
                         "patient_id": result.patient_id,
                         "risk_score": float(result.risk_score),
                         "risk_level": str(result.risk_level),
+                        "alert_type": "sepsis",
                         "top_features": [f.model_dump() for f in result.top_features],
                         "sofa_score": int(result.sofa_score),
                         "news2_score": int(result.news2_score),
@@ -180,6 +251,29 @@ async def post_vitals(payload: VitalRequest) -> PredictionResponse:
                 )
             except Exception:
                 # Do not fail inference if alert service is down
+                pass
+
+    # Gửi alert sớm khi early_warning HIGH nhưng chưa CRITICAL
+    if result.early_warning.early_warning_level == "HIGH" and not result.alert_triggered:
+        ew_msg = (
+            f"Nguy cơ sepsis {result.early_warning.early_warning_probability*100:.0f}% "
+            f"trong 30 phút tới"
+        )
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            try:
+                await client.post(
+                    alert_url,
+                    json={
+                        "patient_id": result.patient_id,
+                        "risk_score": float(result.early_warning.early_warning_probability),
+                        "risk_level": "EARLY_WARNING",
+                        "alert_type": "early_warning",
+                        "top_features": [],
+                        "sofa_score": 0,
+                        "news2_score": 0,
+                    },
+                )
+            except Exception:
                 pass
 
     return result

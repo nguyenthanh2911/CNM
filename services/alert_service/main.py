@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from prometheus_client import Gauge, generate_latest
 from starlette.responses import Response
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine, func
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine, func, inspect, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -32,6 +32,7 @@ class AlertORM(Base):
     top_features = Column(JSONB, nullable=False)
     sofa_score = Column(Integer, nullable=False)
     news2_score = Column(Integer, nullable=False)
+    alert_type = Column(String(32), nullable=False, default="sepsis")  # "sepsis" | "early_warning"
 
     created_at = Column(DateTime(timezone=True), nullable=False, index=True)
     acknowledged = Column(Boolean, nullable=False, default=False, index=True)
@@ -61,6 +62,29 @@ manager = ConnectionManager()
 active_alerts_gauge = Gauge("active_alerts", "Number of active (unacknowledged) alerts")
 
 
+def _ensure_columns(table: str, columns: Dict[str, str]) -> None:
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table(table):
+            return
+        existing = {c.get("name") for c in inspector.get_columns(table)}
+    except Exception:
+        return
+
+    stmts = []
+    for name, sql_type in columns.items():
+        if name in existing:
+            continue
+        stmts.append(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {sql_type}"))
+
+    if not stmts:
+        return
+
+    with engine.begin() as conn:
+        for stmt in stmts:
+            conn.execute(stmt)
+
+
 @app.get("/health")
 async def health() -> Dict[str, str]:
     return {"status": "ok"}
@@ -83,6 +107,16 @@ async def metrics() -> Response:
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
 
+    _ensure_columns(
+        "alerts",
+        {
+            "acknowledged": "BOOLEAN DEFAULT FALSE",
+            "ack_by": "VARCHAR(128)",
+            "ack_at": "TIMESTAMPTZ",
+            "alert_type": "VARCHAR(32) DEFAULT 'sepsis'",
+        },
+        )
+
 
 def _to_response(row: AlertORM) -> AlertResponse:
     return AlertResponse(
@@ -90,6 +124,7 @@ def _to_response(row: AlertORM) -> AlertResponse:
         patient_id=row.patient_id,
         risk_score=float(row.risk_score),
         risk_level=str(row.risk_level),
+        alert_type=str(row.alert_type),
         created_at=row.created_at,
         acknowledged=bool(row.acknowledged),
         ack_by=row.ack_by,
@@ -109,8 +144,9 @@ async def create_alert(payload: AlertCreate) -> AlertResponse:
             risk_score=float(payload.risk_score),
             risk_level=str(payload.risk_level),
             top_features=payload.top_features,
-            sofa_score=int(payload.sofa_score),
+                        sofa_score=int(payload.sofa_score),
             news2_score=int(payload.news2_score),
+            alert_type=payload.alert_type,
             created_at=now,
             acknowledged=False,
             ack_by=None,
@@ -252,6 +288,10 @@ async def ws_patient(websocket: WebSocket, patient_id: str):
         while True:
             msg = await websocket.receive_text()
             if msg.lower() == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, patient_id=patient_id)
+        if msg.lower() == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
         manager.disconnect(websocket, patient_id=patient_id)

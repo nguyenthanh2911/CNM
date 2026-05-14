@@ -1,202 +1,187 @@
 #!/usr/bin/env python3
 """
-Simulate 20 ICU patients sending vitals to ML service in realtime.
-Every 5 seconds, ALL 20 patients send their latest vitals simultaneously.
+ICU Realtime Simulation — 20 bệnh nhân, 40 giờ mô phỏng.
+Mỗi 10 giây gửi 1 data point (= 1 giờ mô phỏng).
+Tổng: 40 giờ x 6 rounds/giờ x 10s = 400 giây thực tế.
+
+Nhóm A (P0002,P0004,P0007,P0008,P0011,P0013,P0015,P0017,P0020, P0006):
+  LOW → gần WARNING → dao động sin, không vượt WARNING
+
+Nhóm B (P0001,P0003,P0005,P0009,P0010,P0012,P0014,P0016,P0018,P0019):
+  LOW → WARNING → HIGH (Sepsis), tăng từ từ
 """
 
-import random
+import math
 import time
 import concurrent.futures
 from datetime import datetime, timezone
 
 import httpx
 
-ML_SERVICE_URL = "http://localhost:8001/vitals"
+ML_SERVICE_URL = "http://ml_service:8001/vitals"
+TOTAL_STEPS = 240   # 40h x 6 steps/h
+STEP_SLEEP  = 10    # giây thực giữa mỗi step
 
+# ---------- helpers ----------
 
-def _clamp(x: float, lo: float, hi: float) -> float:
+def _clamp(x, lo, hi):
     return max(lo, min(hi, float(x)))
 
+def _lerp(a, b, t):
+    """Linear interpolate a→b tại t∈[0,1]."""
+    return a + (b - a) * t
 
-def sanitize_vitals(vitals: dict) -> dict:
-    """Clamp vitals into plausible physiological ranges to avoid API 422."""
-    v = dict(vitals)
-
-    v["heart_rate"] = _clamp(v.get("heart_rate", 0), 30, 220)
-    v["systolic_bp"] = _clamp(v.get("systolic_bp", 0), 60, 220)
-    v["diastolic_bp"] = _clamp(v.get("diastolic_bp", 0), 30, 140)
-    v["temperature"] = _clamp(v.get("temperature", 0), 34.0, 42.0)
-    v["spo2"] = _clamp(v.get("spo2", 0), 70.0, 100.0)
-    v["respiratory_rate"] = _clamp(v.get("respiratory_rate", 0), 6, 60)
-    v["lactate"] = _clamp(v.get("lactate", 0), 0.0, 15.0)
-    v["wbc"] = _clamp(v.get("wbc", 0), 0.5, 50.0)
-    v["creatinine"] = _clamp(v.get("creatinine", 0), 0.1, 15.0)
-    v["bilirubin"] = _clamp(v.get("bilirubin", 0), 0.0, 30.0)
-    v["platelet"] = _clamp(v.get("platelet", 0), 1.0, 1000.0)
-
-    # Ensure systolic stays above diastolic by a small margin
+def sanitize(v: dict) -> dict:
+    v["heart_rate"]       = _clamp(v["heart_rate"],       30,  200)
+    v["systolic_bp"]      = _clamp(v["systolic_bp"],      60,  200)
+    v["diastolic_bp"]     = _clamp(v["diastolic_bp"],     30,  130)
+    v["temperature"]      = _clamp(v["temperature"],      34.0, 41.5)
+    v["spo2"]             = _clamp(v["spo2"],             70.0, 100.0)
+    v["respiratory_rate"] = _clamp(v["respiratory_rate"], 6,   50)
+    v["lactate"]          = _clamp(v["lactate"],          0.1, 15.0)
+    v["wbc"]              = _clamp(v["wbc"],              0.5, 40.0)
+    v["creatinine"]       = _clamp(v["creatinine"],       0.1, 12.0)
+    v["bilirubin"]        = _clamp(v["bilirubin"],        0.0, 25.0)
+    v["platelet"]         = _clamp(v["platelet"],         10,  800)
     if v["systolic_bp"] <= v["diastolic_bp"] + 5:
-        v["systolic_bp"] = min(220.0, v["diastolic_bp"] + 10.0)
+        v["systolic_bp"] = min(200.0, v["diastolic_bp"] + 10.0)
+    return {k: round(float(val), 2) for k, val in v.items()}
 
-    # Round to match existing output style
-    for k in list(v.keys()):
-        if isinstance(v[k], (int, float)):
-            v[k] = round(float(v[k]), 2)
-    return v
+# ---------- vitals profiles ----------
 
+# Mức LOW bình thường (ban đầu tất cả bắt đầu ở đây)
+LOW = {
+    "heart_rate": 72, "systolic_bp": 120, "diastolic_bp": 78,
+    "temperature": 36.8, "spo2": 98.5, "respiratory_rate": 14,
+    "lactate": 1.0, "wbc": 7.0, "creatinine": 0.8,
+    "bilirubin": 0.5, "platelet": 280,
+}
 
-# 20 bệnh nhân với profile sinh lý khác nhau
-PATIENTS = [
-    {"id": "P0001", "severity": 2, "name": "Nguyễn Văn An"},
-    {"id": "P0002", "severity": 0, "name": "Trần Thị Bình"},
-    {"id": "P0003", "severity": 1, "name": "Lê Văn Cường"},
-    {"id": "P0004", "severity": 0, "name": "Phạm Thị Dung"},
-    {"id": "P0005", "severity": 2, "name": "Hoàng Văn Em"},
-    {"id": "P0006", "severity": 1, "name": "Vũ Thị Phương"},
-    {"id": "P0007", "severity": 0, "name": "Đặng Văn Giang"},
-    {"id": "P0008", "severity": 0, "name": "Bùi Thị Hoa"},
-    {"id": "P0009", "severity": 1, "name": "Ngô Văn Inh"},
-    {"id": "P0010", "severity": 2, "name": "Dương Thị Kim"},
-    {"id": "P0011", "severity": 0, "name": "Trịnh Văn Long"},
-    {"id": "P0012", "severity": 1, "name": "Lý Thị Mai"},
-    {"id": "P0013", "severity": 0, "name": "Phan Văn Nam"},
-    {"id": "P0014", "severity": 2, "name": "Đinh Thị Oanh"},
-    {"id": "P0015", "severity": 0, "name": "Hồ Văn Phúc"},
-    {"id": "P0016", "severity": 1, "name": "Cao Thị Quỳnh"},
-    {"id": "P0017", "severity": 0, "name": "Mai Văn Rồng"},
-    {"id": "P0018", "severity": 2, "name": "Tô Thị Sen"},
-    {"id": "P0019", "severity": 1, "name": "Lưu Văn Tâm"},
-    {"id": "P0020", "severity": 0, "name": "Kiều Thị Uyên"},
-]
+# Gần WARNING nhưng chưa vượt (đỉnh sin nhóm A)
+NEAR_WARNING = {
+    "heart_rate": 98, "systolic_bp": 95, "diastolic_bp": 62,
+    "temperature": 37.9, "spo2": 94.5, "respiratory_rate": 20,
+    "lactate": 2.0, "wbc": 11.5, "creatinine": 1.2,
+    "bilirubin": 1.2, "platelet": 175,
+}
 
+# WARNING rõ ràng
+WARNING = {
+    "heart_rate": 108, "systolic_bp": 88, "diastolic_bp": 56,
+    "temperature": 38.5, "spo2": 93.0, "respiratory_rate": 23,
+    "lactate": 2.8, "wbc": 14.0, "creatinine": 1.6,
+    "bilirubin": 2.0, "platelet": 135,
+}
 
-def base_vitals(severity: int) -> dict:
-    """Sinh vitals nền theo mức độ bệnh."""
-    if severity == 0:  # STABLE
-        return {
-            "heart_rate":        random.uniform(60, 85),
-            "systolic_bp":       random.uniform(110, 130),
-            "diastolic_bp":      random.uniform(70, 85),
-            "temperature":       random.uniform(36.5, 37.2),
-            "spo2":              random.uniform(97, 99),
-            "respiratory_rate":  random.uniform(12, 16),
-            "lactate":           random.uniform(0.5, 1.5),
-            "wbc":               random.uniform(4.5, 10.0),
-            "creatinine":        random.uniform(0.6, 1.1),
-            "bilirubin":         random.uniform(0.2, 0.8),
-            "platelet":          random.uniform(180, 350),
-        }
-    elif severity == 1:  # WARNING
-        return {
-            "heart_rate":        random.uniform(95, 115),
-            "systolic_bp":       random.uniform(90, 110),
-            "diastolic_bp":      random.uniform(55, 70),
-            "temperature":       random.uniform(37.8, 38.8),
-            "spo2":              random.uniform(93, 96),
-            "respiratory_rate":  random.uniform(20, 25),
-            "lactate":           random.uniform(2.0, 3.5),
-            "wbc":               random.uniform(12.0, 18.0),
-            "creatinine":        random.uniform(1.3, 2.0),
-            "bilirubin":         random.uniform(1.0, 2.5),
-            "platelet":          random.uniform(100, 170),
-        }
-    else:  # CRITICAL
-        return {
-            "heart_rate":        random.uniform(120, 145),
-            "systolic_bp":       random.uniform(70, 88),
-            "diastolic_bp":      random.uniform(40, 55),
-            "temperature":       random.uniform(39.0, 40.5),
-            "spo2":              random.uniform(88, 92),
-            "respiratory_rate":  random.uniform(26, 35),
-            "lactate":           random.uniform(4.0, 8.0),
-            "wbc":               random.uniform(18.0, 30.0),
-            "creatinine":        random.uniform(2.5, 5.0),
-            "bilirubin":         random.uniform(3.0, 8.0),
-            "platelet":          random.uniform(40, 90),
-        }
+# HIGH / Sepsis rõ ràng
+HIGH = {
+    "heart_rate": 128, "systolic_bp": 75, "diastolic_bp": 45,
+    "temperature": 39.4, "spo2": 89.5, "respiratory_rate": 29,
+    "lactate": 4.5, "wbc": 20.0, "creatinine": 2.8,
+    "bilirubin": 3.5, "platelet": 72,
+}
 
+# ---------- bệnh nhân ----------
 
-# Lưu state vitals hiện tại của mỗi bệnh nhân (drift theo thời gian)
-_state: dict[str, dict] = {}
+GROUP_A = ["P0002","P0004","P0007","P0008","P0011","P0013","P0015","P0017","P0020","P0006"]
+GROUP_B = ["P0001","P0003","P0005","P0009","P0010","P0012","P0014","P0016","P0018","P0019"]
 
+ALL_PATIENTS = GROUP_A + GROUP_B
 
-def get_next_vitals(patient: dict) -> dict:
-    """Lấy vitals tiếp theo, drift dần từ state trước và sanitize."""
-    pid = patient["id"]
-    sev = patient["severity"]
+import random
 
-    if pid not in _state:
-        _state[pid] = base_vitals(sev)
+def _noise(base: dict, scale: float = 0.02) -> dict:
+    """Thêm nhiễu nhỏ ±scale% vào mỗi chỉ số."""
+    return {k: v * (1 + random.uniform(-scale, scale)) for k, v in base.items()}
 
-    # Drift nhẹ về phía base mỗi lần
-    target = base_vitals(sev)
-    current = _state[pid]
-    drifted = {}
-    for k in current:
-        drift = (target[k] - current[k]) * 0.15
-        drifted[k] = round(current[k] + drift + (target[k] * 0.02 * random.uniform(-1, 1)), 2)
+def vitals_group_a(step: int) -> dict:
+    """
+    Nhóm A: LOW → NEAR_WARNING rồi dao động sin.
+    Phase 1 (step 0-60): tăng dần LOW → NEAR_WARNING
+    Phase 2 (step 60-240): sin giữa LOW và NEAR_WARNING
+    """
+    if step < 60:
+        t = step / 60.0
+        # easing: tăng chậm lúc đầu
+        t = t * t
+        base = {k: _lerp(LOW[k], NEAR_WARNING[k], t) for k in LOW}
+    else:
+        # sin từ LOW đến NEAR_WARNING, chu kỳ ~60 steps
+        phase = (step - 60) / 60.0 * 2 * math.pi
+        t = (math.sin(phase - math.pi / 2) + 1) / 2  # 0→1 sin
+        t = t * 0.85  # không chạm đỉnh NEAR_WARNING hoàn toàn
+        base = {k: _lerp(LOW[k], NEAR_WARNING[k], t) for k in LOW}
+    return sanitize(_noise(base, 0.015))
 
-    _state[pid] = drifted
-    return sanitize_vitals(drifted)
+def vitals_group_b(step: int) -> dict:
+    """
+    Nhóm B: LOW → WARNING → HIGH, tăng từ từ.
+    Phase 1 (step 0-80):   LOW → WARNING (easing)
+    Phase 2 (step 80-160): WARNING (dao động nhẹ)
+    Phase 3 (step 160-240): WARNING → HIGH (easing)
+    """
+    if step < 80:
+        t = (step / 80.0) ** 1.5  # tăng chậm đầu
+        base = {k: _lerp(LOW[k], WARNING[k], t) for k in LOW}
+    elif step < 160:
+        t = (step - 80) / 80.0
+        # dao động nhẹ quanh WARNING
+        wobble = math.sin(t * 4 * math.pi) * 0.08
+        base = {k: WARNING[k] * (1 + wobble * 0.1) for k in LOW}
+    else:
+        t = ((step - 160) / 80.0) ** 1.3
+        base = {k: _lerp(WARNING[k], HIGH[k], min(t, 1.0)) for k in LOW}
+    return sanitize(_noise(base, 0.02))
 
+# ---------- send ----------
 
-def send_one_patient(patient: dict) -> str:
-    """Gửi vitals cho 1 bệnh nhân, trả về string kết quả."""
-    vitals = get_next_vitals(patient)
+def send_patient(patient_id: str, step: int):
+    if patient_id in GROUP_A:
+        vitals = vitals_group_a(step)
+    else:
+        vitals = vitals_group_b(step)
+
     payload = {
-        "patient_id": patient["id"],
+        "patient_id": patient_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         **vitals,
     }
-
     try:
-        with httpx.Client(timeout=5.0) as client:
+        with httpx.Client(timeout=8.0) as client:
             resp = client.post(ML_SERVICE_URL, json=payload)
-            if resp.status_code != 200:
-                try:
-                    err = resp.json()
-                except Exception:
-                    err = {"text": resp.text}
-                return (f"[{datetime.now().strftime('%H:%M:%S')}] "
-                        f"{patient['id']:6s} | HTTP {resp.status_code} | {err}")
-
-            result = resp.json()
-            level = result.get("risk_level", "?")
-            score = float(result.get("risk_score", 0.0) or 0.0)
-            return (f"[{datetime.now().strftime('%H:%M:%S')}] "
-                    f"{patient['id']:6s} | {level:8s} | score={score:.3f} | "
-                    f"HR={vitals['heart_rate']:.0f} BP={vitals['systolic_bp']:.0f}/"
-                    f"{vitals['diastolic_bp']:.0f} SpO2={vitals['spo2']:.1f}%")
+            if resp.status_code == 200:
+                r = resp.json()
+                ew = r.get("early_warning", {})
+                return (f"{patient_id} | {r.get('risk_level','?'):8s} "
+                        f"score={r.get('risk_score',0):.3f} "
+                        f"EW={ew.get('early_warning_level','?')}({ew.get('early_warning_probability',0)*100:.0f}%)")
+            return f"{patient_id} | HTTP {resp.status_code}"
     except Exception as e:
-        return f"[ERROR] {patient['id']}: {e}"
+        return f"{patient_id} | ERROR: {e}"
 
+def send_all(step: int):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
+        futures = {ex.submit(send_patient, pid, step): pid for pid in ALL_PATIENTS}
+        for f in concurrent.futures.as_completed(futures):
+            print(" ", f.result())
 
-def send_all_patients():
-    """Gửi vitals cho tất cả 20 bệnh nhân song song, in kết quả gộp."""
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        futures = {executor.submit(send_one_patient, p): p for p in PATIENTS}
-        for future in concurrent.futures.as_completed(futures):
-            line = future.result()
-            print(line)
-
+# ---------- main ----------
 
 def main():
     print("=" * 65)
-    print(" ICU Sepsis — Realtime Simulation — 20 Patients")
-    print(" Mỗi 5 giây: gửi đồng thời 20 bệnh nhân")
-    print(" Ctrl+C để dừng")
+    print(f" ICU Simulation | {TOTAL_STEPS} steps x {STEP_SLEEP}s = {TOTAL_STEPS*STEP_SLEEP}s thực tế")
+    print(f" Nhóm A (10 BN): LOW → sin(NEAR_WARNING)")
+    print(f" Nhóm B (10 BN): LOW → WARNING → HIGH")
     print("=" * 65)
 
-    print(f"\n {len(PATIENTS)} patients. Sending ALL every 5 seconds...\n")
+    for step in range(TOTAL_STEPS):
+        hour_sim = step / 6.0
+        print(f"\n[Step {step+1:03d}/{TOTAL_STEPS} | Giờ mô phỏng {hour_sim:.1f}h | {datetime.now().strftime('%H:%M:%S')}]")
+        send_all(step)
+        if step < TOTAL_STEPS - 1:
+            time.sleep(STEP_SLEEP)
 
-    try:
-        while True:
-            send_all_patients()
-            print(f"--- Round complete at {datetime.now().strftime('%H:%M:%S')} ---\n")
-            time.sleep(5)
-    except KeyboardInterrupt:
-        print("\n Simulation stopped.")
-
+    print("\n Simulation complete.")
 
 if __name__ == "__main__":
     main()
