@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from django.conf import settings
 from django.db.models import QuerySet
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.safestring import mark_safe
 
@@ -262,3 +262,40 @@ def acknowledge_alert(request: HttpRequest, alert_id: str) -> HttpResponse:
         pass
 
     return redirect(f"/alerts/?status=pending")
+
+
+def patient_latest_api(request: HttpRequest, patient_id: str) -> JsonResponse:
+    p = Prediction.objects.filter(patient_id=patient_id).order_by('-timestamp').first()
+    if not p:
+        return JsonResponse({}, status=404)
+
+    ml_url = getattr(settings, 'ML_SERVICE_URL', 'http://localhost:8001').rstrip('/')
+    shap_features = []
+    try:
+        with httpx.Client(timeout=2.0) as client:
+            resp = client.get(f'{ml_url}/vitals/{patient_id}/history')
+            if resp.status_code == 200:
+                shap_features = resp.json().get('top_features', [])
+    except Exception:
+        pass
+
+    return JsonResponse({
+        'risk_score': p.risk_score,
+        'risk_level': p.risk_level,
+        'sofa_score': p.sofa_score,
+        'news2_score': p.news2_score,
+        'timestamp': p.timestamp.isoformat(),
+        'heart_rate': p.heart_rate,
+        'systolic_bp': p.systolic_bp,
+        'diastolic_bp': p.diastolic_bp,
+        'temperature': p.temperature,
+        'spo2': p.spo2,
+        'respiratory_rate': p.respiratory_rate,
+        'early_warning': {
+            'early_warning_probability': p.early_warning_probability or 0,
+            'early_warning_level': p.early_warning_level or 'LOW',
+            'trend_score': p.trend_score or 0,
+            'threshold_score': p.threshold_score or 0,
+        },
+        'shap_features': shap_features,
+    })
