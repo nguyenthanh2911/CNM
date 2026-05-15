@@ -52,22 +52,25 @@ with engine.connect() as conn:
 print("Table vital_records ready")
 
 np.random.seed(123)
+def _clip(v, lo, hi):
+    return float(max(lo, min(hi, v)))
+
 now = pd.Timestamp.now("UTC")
 rows = [
     {
         "patient_id": f"P{(i % 20) + 1:04d}",
         "timestamp": (now - pd.Timedelta(hours=i)).isoformat(),
-        "heart_rate":       float(np.random.normal(85, 20).clip(40, 160)),
-        "systolic_bp":      float(np.random.normal(110, 20).clip(70, 180)),
-        "diastolic_bp":     float(np.random.normal(70, 15).clip(40, 110)),
-        "temperature":      float(np.random.normal(37.5, 1.0).clip(35.5, 40.5)),
-        "spo2":             float(np.random.normal(96, 4).clip(80, 100)),
-        "respiratory_rate": float(np.random.normal(18, 6).clip(8, 40)),
-        "lactate":          float(np.random.exponential(2.0).clip(0.3, 12)),
-        "wbc":              float(np.random.normal(10, 5).clip(1, 35)),
-        "creatinine":       float(np.random.exponential(1.5).clip(0.3, 10)),
-        "bilirubin":        float(np.random.exponential(1.0).clip(0.1, 20)),
-        "platelet":         float(np.random.normal(220, 90).clip(20, 600)),
+        "heart_rate":       _clip(np.random.normal(85, 20), 40, 160),
+        "systolic_bp":      _clip(np.random.normal(110, 20), 70, 180),
+        "diastolic_bp":     _clip(np.random.normal(70, 15), 40, 110),
+        "temperature":      _clip(np.random.normal(37.5, 1.0), 35.5, 40.5),
+        "spo2":             _clip(np.random.normal(96, 4), 80, 100),
+        "respiratory_rate": _clip(np.random.normal(18, 6), 8, 40),
+        "lactate":          _clip(np.random.exponential(2.0), 0.3, 12),
+        "wbc":              _clip(np.random.normal(10, 5), 1, 35),
+        "creatinine":       _clip(np.random.exponential(1.5), 0.3, 10),
+        "bilirubin":        _clip(np.random.exponential(1.0), 0.1, 20),
+        "platelet":         _clip(np.random.normal(220, 90), 20, 600),
     }
     for i in range(200)
 ]
