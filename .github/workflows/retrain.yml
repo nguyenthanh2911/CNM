@@ -18,4 +18,5 @@ jobs:
         env:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python monitoring/retrain_flow.py
+
+        run: python -m monitoring.retrain_flow
