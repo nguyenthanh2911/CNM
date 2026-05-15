@@ -29,8 +29,10 @@ data = {
     "sepsis_label":     np.random.choice([0, 1], n, p=[0.85, 0.15]),
     "early_warning_label": np.random.choice([0, 1, 2], n, p=[0.6, 0.25, 0.15]),
 }
-pd.DataFrame(data, columns=cols).to_parquet("data/processed/features_train.parquet", index=False)
-print("Created data/processed/features_train.parquet")
+# Drop columns that don't exist in vital_records (Evidently compares schemas)
+df = pd.DataFrame(data, columns=cols).drop(columns=["sepsis_label", "early_warning_label"])
+df.to_parquet("data/processed/features_train.parquet", index=False)
+print(f"Created data/processed/features_train.parquet — {len(df)} rows, {len(df.columns)} cols [{', '.join(df.columns)}]")
 
 # ── 2. Seed vital_records ────────────────────────────────────────────
 DB_URL = os.getenv("DATABASE_URL") or "postgresql+psycopg2://sepsis_user:sepsis_pass@localhost:5432/sepsis_db"
