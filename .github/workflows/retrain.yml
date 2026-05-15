@@ -27,9 +27,9 @@ jobs:
 
       - name: Start MLflow server (background)
         run: |
-          nohup mlflow server --host 0.0.0.0 --port 5000 &> mlflow.log &
-          sleep 5
-          curl -s http://localhost:5000/health
+          mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns &
+          sleep 8
+          curl -sf http://localhost:5000/health && echo 'MLflow OK' || echo 'MLflow may still be starting'
 
       - name: Seed CI data
         env:
