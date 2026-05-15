@@ -123,97 +123,113 @@ FastAPI ML Service
 
 ```
 CNM/
-├── README.md
-├── docker-compose.yml
-├── .env.example
-├── requirements.txt
+├── docker-compose.yml           # Cấu hình các dịch vụ Docker (ML service, Django, MLflow, Postgres, v.v)
+├── pytest.ini                   # Cấu hình môi trường và tuỳ chọn chạy pytest
+├── README.md                    # Tài liệu dự án
+├── requirements.txt             # Danh sách thư viện phụ thuộc Python
+├── test_vitals.json             # File JSON chứa dữ liệu mẫu dùng cho test
 │
-├── docs/
-│   ├── architecture.md
-│   ├── api_spec.yaml
-│   ├── database_schema.sql
-│   └── diagrams/
-│       ├── usecase.png
-│       ├── activity.png
-│       ├── sequence.png
-│       ├── class_diagram.png
-│       └── erd.png
+├── artifacts/                   # Thư mục lưu các artifacts sinh ra
+│   └── preprocessor.joblib      # Pipeline tiền xử lý lưu ở định dạng joblib
 │
-├── data/
-│   ├── raw/
-│   │   └── (không commit — dữ liệu thô)
-│   ├── processed/
-│   │   ├── features_train.parquet
-│   │   ├── features_val.parquet
-│   │   └── features_test.parquet
-│   └── synthetic/
+├── data/                        # Tổ chức các loại dữ liệu
+│   ├── processed/               # Dữ liệu sau khi đã tiền xử lý, rút trích feature
+│   ├── raw/                     # Dữ liệu gốc rỗng ban đầu (không commit)
+│   └── synthetic/               # Dữ liệu giải lập tự động tạo ra
 │       └── icu_data_synthetic.csv
 │
-├── data_pipeline/
+├── data_pipeline/               # Xử lý dữ liệu đầu vào
 │   ├── __init__.py
-│   ├── data_generator.py        # Sinh dữ liệu synthetic ICU
-│   │                            #   - PhysiologicalModel: mô phỏng vitals
-│   │                            #   - ICUSepsisGenerator: CSV / stream mode
-│   └── preprocessor.py          # Imputation (forward-fill, KNN) + normalize
+│   ├── data_generator.py        # Sinh dữ liệu synthetic mô phỏng các bệnh nhân ICU
+│   └── preprocessor.py          # Tiền xử lý dữ liệu (chuẩn hoá, điền khuyết)
 │
-├── feature_engineering/
+├── docs/                        # Tài liệu dự án bổ sung
+│   └── database_schema.sql      # Schema tạo cấu trúc bảng cho PostgreSQL
+│
+├── feature_engineering/         # Mã nguồn trích xuất và biến đổi đặc trưng
 │   ├── __init__.py
-│   ├── vitals_features.py       # Rolling mean/std/min/max, trend
-│   ├── lab_features.py          # Tốc độ thay đổi lactate, WBC, flag bất thường
-│   ├── clinical_scores.py       # SOFA, NEWS2, qSOFA
-│   └── feature_builder.py       # Pipeline tổng hợp toàn bộ features
+│   ├── clinical_scores.py       # Tính toán các chỉ số lâm sàng (ví dụ SOFA, NEWS2, qSOFA)
+│   ├── feature_builder.py       # Pipeline tổng hợp các features dữ liệu
+│   └── vitals_features.py       # Trích xuất đặc trưng từ các chỉ số sinh tồn (vitals)
 │
-├── ml/
+├── ml/                          # Các thành phần Machine Learning
 │   ├── __init__.py
-│   ├── models/
-│   │   └── xgboost_model.py     # XGBoost classifier (class_weight balanced)
-│   ├── train.py                 # Load parquet → train → log MLflow
-│   ├── evaluate.py              # AUROC, F1, Sensitivity, ROC curve
-│   ├── explain.py               # SHAP TreeExplainer, top-5 features
-│   └── mlflow_utils.py          # Log params/metrics, Model Registry
+│   ├── early_warning.py         # Logic tạo các model cảnh báo sớm
+│   ├── evaluate.py              # Đánh giá độ chính xác (metrics: AUROC, Sensitivity, v.v)
+│   ├── explain.py               # Thư viện dùng SHAP để giải thích quyết định mô hình
+│   ├── mlflow_utils.py          # Quản lý logging, tracking experiments trên MLflow
+│   ├── train.py                 # Mã nguồn chạy pipeline training mô hình tổng thể
+│   └── models/
+│       ├── __init__.py
+│       └── xgboost_model.py     # Định nghĩa kiến trúc cho mô hình XGBoost
 │
-├── services/
-│   ├── ml_service/              # FastAPI — Inference Engine (port 8001)
-│   │   ├── main.py
-│   │   ├── predictor.py         # Load model từ MLflow Registry, predict
-│   │   └── schemas.py           # Pydantic request/response schemas
-│   └── alert_service/           # FastAPI — Alert Manager (port 8002)
-│       ├── main.py
-│       └── websocket_manager.py # WebSocket push khi risk ≥ 0.7
+├── monitoring/                  # Giám sát hệ thống và Data Drift
+│   ├── __init__.py
+│   ├── drift_detector.py        # Ứng dụng Evidently AI phát hiện data drift
+│   ├── retrain_flow.py          # Pipeline Prefect kích hoạt retrain tự động
+│   ├── grafana/
+│   │   └── dashboards/
+│   │       └── icu_dashboard.json # File cấu hình Dashboard Grafana hiển thị trạng thái
+│   └── prometheus/
+│       └── prometheus.yml       # Cấu hình cho việc thu thập metric của Prometheus
 │
-├── web/                         # Django Dashboard (port 8000)
-│   ├── manage.py
-│   ├── dashboard/
-│   │   ├── views.py
-│   │   ├── consumers.py         # Django Channels WebSocket consumer
-│   │   └── templates/
-│   │       └── dashboard.html
-│   └── config/
-│       └── settings.py
+├── scripts/                     # Scripts hỗ trợ vòng đời hệ thống
+│   ├── check_health.sh          # Script bash kiểm tra trạng thái sức khoẻ tự động
+│   ├── ci_seed_data.py          # Script seed dữ liệu giả lập cho CI/CD test
+│   ├── run_demo.sh              # Bash script để khởi chạy nhanh demo ứng dụng
+│   ├── seed_patients.py         # Chèn sẵn hồ sơ bệnh nhân ảo vào PostgreSQL
+│   ├── setup_db.ps1             # PowerShell script thiết lập database cho môi trường Windows
+│   ├── setup_db.sh              # Bash script thiết lập database cho môi trường Linux/macOS
+│   └── simulate_realtime.py     # Mô phỏng đẩy dữ liệu liên tục như sensor ICU thực tế 
 │
-├── monitoring/
-│   ├── drift_detector.py        # Evidently AI — phát hiện data drift
-│   ├── retrain_flow.py          # Prefect flow — trigger retrain khi drift > 0.7
-│   ├── prometheus/
-│   │   └── prometheus.yml
-│   └── grafana/
-│       └── dashboards/
-│           └── icu_dashboard.json
+├── services/                    # Tầng Microservices backend 
+│   ├── __init__.py
+│   ├── alert_service/           # Dịch vụ quản lý cảnh báo (FastAPI)
+│   │   ├── __init__.py
+│   │   ├── Dockerfile
+│   │   ├── main.py              # Điểm khởi chạy của dịch vụ gửi cảnh báo websocket
+│   │   ├── schemas.py           # Định nghĩa Pydantic schema cho Input/Output
+│   │   └── websocket_manager.py # Quản lý kết nối WebSocket để push alerts realtime
+│   └── ml_service/              # Dịch vụ Inferencing Machine Learning (FastAPI)
+│       ├── __init__.py
+│       ├── Dockerfile
+│       ├── main.py              # Khởi tạo API nhận luồng vitals và trả dự đoán ML
+│       ├── predictor.py         # Logic load model từ mlflow để chấm điểm (risk_score)
+│       └── schemas.py           # Pydantic Models áp dụng chung (cho ML request)
 │
-├── tests/
-│   ├── unit/
-│   │   ├── test_features.py
-│   │   ├── test_model.py
-│   │   └── test_api.py
-│   └── integration/
-│       └── test_pipeline.py
+├── tests/                       # Automated Testing (Pytest)
+│   ├── __init__.py
+│   ├── integration/
+│   │   ├── __init__.py
+│   │   └── test_pipeline.py     # Test tính liên kết của pipelines (E2E Integration)
+│   └── unit/
+│       ├── __init__.py
+│       ├── test_api.py          # Viết test riêng cho từng endpoint của các service
+│       ├── test_features.py     # Kiểm thử logic của các hàm tạo feature engineering
+│       └── test_model.py        # Unit test xác minh inference model đúng kết quả
 │
-└── scripts/
-    ├── setup_db.sh
-  ├── setup_db.ps1
-    ├── seed_patients.py
-    ├── check_health.sh
-    └── run_demo.sh
+└── web/                         # Ứng dụng Web / Frontend
+    ├── Dockerfile
+    ├── manage.py                # Điểm khởi chạy của Backend framework Django
+    ├── config/                  # Thư mục cấu hình cốt lõi của Django 
+    │   ├── __init__.py
+    │   ├── asgi.py              # Interface khởi tạo app hỗ trợ dạng async WebSocket
+    │   ├── settings.py          # Cấu hình chính (database, app config, secrets)
+    │   ├── urls.py              # URL matching cấp website
+    │   └── wsgi.py              # Interface khởi tạo server WSGI
+    ├── dashboard/               # Ứng dụng con của Django thao tác Dashboard
+    │   ├── __init__.py
+    │   ├── consumers.py         # Django Channels nhận / trao đổi luồng WebSocket 
+    │   ├── models.py            # Mô hình dữ liệu ORM nối về Postgres DB
+    │   ├── routing.py           # Định nghĩa WebSockets routes
+    │   ├── urls.py              # Các routes HTTP GET của giao diện màn hình
+    │   ├── views.py             # View chức năng và render context (logic Frontend)
+    │   └── templates/           
+    │       └── dashboard/       # Tệp UI HTML với Tailwind/CSS
+    │           ├── alerts.html         # Giao diện xem cảnh báo tập trung
+    │           ├── base.html           # Layout chung gốc
+    │           ├── patient_detail.html # Trang xem chi tiết 1 bệnh nhân
+    │           └── patient_list.html   # Bảng giám sát danh sách ICU toàn diện
 ```
 
 ---
