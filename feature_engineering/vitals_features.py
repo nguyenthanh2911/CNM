@@ -83,7 +83,7 @@ def add_rolling_features(df: pd.DataFrame, patient_col: str = "patient_id", time
     if added_cols:
         df[added_cols] = (
             df.groupby(patient_col, sort=False)[added_cols]
-            .apply(lambda g: g.fillna(method="bfill"))
+            .apply(lambda g: g.bfill())
             .reset_index(level=0, drop=True)
         )
 

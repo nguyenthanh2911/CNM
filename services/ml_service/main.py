@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
@@ -82,20 +83,6 @@ def _build_db_url() -> str:
 engine = create_engine(_build_db_url(), pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
-app = FastAPI(title="CNM Sepsis ML Service")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.mount("/metrics", make_asgi_app())
-
-_start_time: Optional[float] = None
-
 
 def _ensure_columns(table: str, columns: Dict[str, str]) -> None:
     """Best-effort schema upgrade for existing tables.
@@ -127,20 +114,11 @@ def _ensure_columns(table: str, columns: Dict[str, str]) -> None:
             conn.execute(stmt)
 
 
-@app.middleware("http")
-async def prometheus_latency_middleware(request, call_next):
-    start = time.perf_counter()
-    try:
-        response = await call_next(request)
-        return response
-    finally:
-        elapsed = time.perf_counter() - start
-        if request.url.path == "/vitals":
-            inference_seconds.observe(elapsed)
+_start_time: Optional[float] = None
 
 
-@app.on_event("startup")
-def startup_event() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global _start_time
     _start_time = time.time()
 
@@ -174,6 +152,32 @@ def startup_event() -> None:
             "threshold_score": "DOUBLE PRECISION",
         },
     )
+    yield
+
+
+app = FastAPI(title="CNM Sepsis ML Service", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.mount("/metrics", make_asgi_app())
+
+
+@app.middleware("http")
+async def prometheus_latency_middleware(request, call_next):
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        elapsed = time.perf_counter() - start
+        if request.url.path == "/vitals":
+            inference_seconds.observe(elapsed)
 
 
 @app.post("/vitals", response_model=PredictionResponse)
