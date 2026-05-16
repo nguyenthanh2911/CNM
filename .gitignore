@@ -113,7 +113,7 @@ data/synthetic/
 #skill agent
 .continue/
 .github/
-*.skills.md
+*copilot-instructions.md
 
 
 
