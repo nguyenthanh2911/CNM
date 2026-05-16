@@ -7,7 +7,6 @@
 ![Docker](https://img.shields.io/badge/deploy-Docker-blue)
 
 > Hệ thống theo dõi ICU real-time sử dụng Machine Learning nhằm cảnh báo sớm Sepsis
-> Đồ án môn học Công Nghệ Mới| Khoa Công nghệ Thông tin
 
 ---
 
