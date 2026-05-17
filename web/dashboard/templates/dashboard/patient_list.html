@@ -1,95 +1,295 @@
 {% extends "dashboard/base.html" %}
-
 {% block content %}
-<div class="row g-3 mb-3">
-  <div class="col-md-3">
-    <div class="card">
-      <div class="card-body">
-        <div class="text-muted">Tổng bệnh nhân</div>
-        <div class="fs-3 fw-bold">{{ total }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card border-danger">
-      <div class="card-body">
-        <div class="text-muted">CRITICAL</div>
-        <div class="fs-3 fw-bold text-danger">{{ critical }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card border-warning">
-      <div class="card-body">
-        <div class="text-muted">WARNING</div>
-        <div class="fs-3 fw-bold text-warning">{{ warning }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card border-success">
-      <div class="card-body">
-        <div class="text-muted">STABLE</div>
-        <div class="fs-3 fw-bold text-success">{{ stable }}</div>
-      </div>
-    </div>
-  </div>
-</div>
 
-<div class="card">
-  <div class="card-header">Danh sách bệnh nhân</div>
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
+<style>
+.db-page{padding:1rem;display:flex;flex-direction:column;gap:14px;font-family:inherit}
+
+/* ── Topbar ──────────────────────────────── */
+.db-topbar{display:flex;justify-content:space-between;align-items:center;
+  padding:10px 18px;background:#fff;border:0.5px solid #efefef;border-radius:14px;
+  box-shadow:0 1px 6px rgba(0,0,0,.04)}
+.db-brand{display:flex;align-items:center;gap:10px}
+.db-brand-icon{width:34px;height:34px;border-radius:10px;
+  background:linear-gradient(135deg,#7F77DD,#D4537E);
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:18px}
+.db-brand-name{font-size:15px;font-weight:500;color:#1a1a1a}
+.db-brand-sub{font-size:11px;color:#aaa}
+.db-topbar-right{display:flex;align-items:center;gap:16px}
+.db-alert-btn{display:flex;align-items:center;gap:6px;padding:6px 14px;
+  background:linear-gradient(135deg,rgba(212,83,126,.08),rgba(127,119,221,.08));
+  border:0.5px solid rgba(212,83,126,.25);border-radius:20px;
+  font-size:12px;font-weight:500;color:#D4537E;
+  animation:pulse-alert 2s ease-in-out infinite}
+@keyframes pulse-alert{
+  0%,100%{box-shadow:0 0 0 0 rgba(212,83,126,.25)}
+  50%{box-shadow:0 0 0 7px rgba(212,83,126,0)}}
+.db-alert-dot{width:7px;height:7px;border-radius:50%;background:#D4537E;
+  animation:blink 1.2s ease-in-out infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.1}}
+.db-clock-wrap{text-align:right}
+.db-clock{font-size:22px;font-weight:500;color:#1a1a1a;
+  font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.db-clock-date{font-size:11px;color:#aaa}
+
+/* ── Stats ───────────────────────────────── */
+.db-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.db-stat-card{background:#fff;border:0.5px solid #f0f0f0;border-radius:14px;
+  padding:1rem 1.25rem;position:relative;overflow:hidden;
+  transition:transform .2s ease,box-shadow .2s ease}
+.db-stat-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.06)}
+.db-stat-card::before{content:'';position:absolute;top:-20px;right:-20px;
+  width:70px;height:70px;border-radius:50%;opacity:.12;pointer-events:none}
+.db-stat-card.s-total::before   {background:#7F77DD}
+.db-stat-card.s-critical::before{background:#D4537E}
+.db-stat-card.s-warning::before {background:#EF9F27}
+.db-stat-card.s-stable::before  {background:#1D9E75}
+.db-stat-label{font-size:11px;color:#aaa;margin-bottom:6px;
+  display:flex;align-items:center;gap:5px}
+.db-stat-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.db-stat-num{font-size:36px;font-weight:500;line-height:1}
+.db-stat-card.s-total    .db-stat-num{
+  background:linear-gradient(135deg,#7F77DD,#D4537E);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.db-stat-card.s-critical .db-stat-num{color:#D4537E}
+.db-stat-card.s-warning  .db-stat-num{color:#BA7517}
+.db-stat-card.s-stable   .db-stat-num{color:#1D9E75}
+.db-stat-bar{height:3px;border-radius:3px;margin-top:10px}
+.db-stat-card.s-total    .db-stat-bar{background:linear-gradient(90deg,#7F77DD,#D4537E);width:100%}
+.db-stat-card.s-critical .db-stat-bar{background:linear-gradient(90deg,#D4537E,#993556)}
+.db-stat-card.s-warning  .db-stat-bar{background:linear-gradient(90deg,#EF9F27,#D4537E)}
+.db-stat-card.s-stable   .db-stat-bar{background:linear-gradient(90deg,#1D9E75,#378ADD)}
+
+/* ── Table card ──────────────────────────── */
+.db-table-card{background:#fff;border:0.5px solid #f0f0f0;border-radius:14px;
+  overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.03)}
+.db-table-header{display:flex;justify-content:space-between;align-items:center;
+  padding:12px 18px;border-bottom:0.5px solid #f5f5f5}
+.db-table-title{font-size:13px;font-weight:500;color:#555;
+  display:flex;align-items:center;gap:8px}
+.db-title-dot{width:8px;height:8px;border-radius:50%;
+  background:linear-gradient(135deg,#7F77DD,#D4537E);
+  animation:blink 2s ease-in-out infinite}
+.db-ws-status{display:flex;align-items:center;gap:5px;font-size:11px;color:#1D9E75}
+.db-ws-dot{width:6px;height:6px;border-radius:50%;background:#1D9E75;
+  animation:blink 2s ease-in-out infinite}
+
+/* ── Table ───────────────────────────────── */
+table.db-table{width:100%;border-collapse:collapse}
+table.db-table thead tr{
+  background:linear-gradient(135deg,rgba(127,119,221,.05),rgba(212,83,126,.04))}
+table.db-table th{padding:10px 14px;font-size:11px;font-weight:500;color:#aaa;
+  text-transform:uppercase;letter-spacing:.5px;border-bottom:0.5px solid #f0f0f0}
+table.db-table td{padding:12px 14px;font-size:13px;color:#333;
+  border-bottom:0.5px solid #fafafa;vertical-align:middle}
+table.db-table tbody tr{transition:background .15s ease}
+table.db-table tbody tr:hover{background:rgba(127,119,221,.03)}
+table.db-table tbody tr:last-child td{border-bottom:none}
+table.db-table tbody tr.row-critical{border-left:3px solid #D4537E}
+table.db-table tbody tr.row-warning {border-left:3px solid #EF9F27}
+table.db-table tbody tr.row-stable  {border-left:3px solid #1D9E75}
+
+.db-patient-id{font-weight:500;color:#7F77DD;font-size:12px}
+.db-patient-name{font-weight:500;color:#1a1a1a}
+.db-room-badge{font-size:11px;padding:3px 9px;border-radius:20px}
+.db-room-badge.r-purple{background:#EEEDFE;color:#534AB7}
+.db-room-badge.r-teal  {background:#E1F5EE;color:#085041}
+.db-room-badge.r-amber {background:#FFF3E0;color:#854F0B}
+
+.db-risk-wrap{display:flex;flex-direction:column;gap:3px;min-width:130px}
+.db-risk-bar-wrap{height:5px;background:#f3f3f5;border-radius:5px;overflow:hidden}
+.db-risk-bar{height:100%;border-radius:5px;
+  transition:width .8s cubic-bezier(.4,0,.2,1)}
+.db-risk-bar.critical{background:linear-gradient(90deg,#D4537E,#7F77DD)}
+.db-risk-bar.warning {background:linear-gradient(90deg,#EF9F27,#D4537E)}
+.db-risk-bar.stable  {background:linear-gradient(90deg,#1D9E75,#378ADD)}
+.db-risk-num{font-size:11px;color:#bbb}
+
+.db-level-badge{display:inline-block;font-size:11px;
+  padding:3px 10px;border-radius:20px;font-weight:500}
+.db-level-badge.critical{background:linear-gradient(135deg,#D4537E,#7F77DD);color:#fff}
+.db-level-badge.warning {background:linear-gradient(135deg,#EF9F27,#D4537E);color:#fff}
+.db-level-badge.stable  {background:linear-gradient(135deg,#1D9E75,#378ADD);color:#fff}
+
+.db-view-btn{padding:5px 14px;border:0.5px solid #e0ddf8;border-radius:8px;
+  font-size:12px;color:#7F77DD;text-decoration:none;
+  transition:background .2s,color .2s,border-color .2s}
+.db-view-btn:hover{
+  background:linear-gradient(135deg,#7F77DD,#D4537E);
+  color:#fff;border-color:transparent}
+
+/* ── Footer ──────────────────────────────── */
+.db-footer{display:flex;align-items:center;gap:6px;
+  padding:10px 18px;font-size:11px;color:#bbb;
+  border-top:0.5px solid #f5f5f5}
+.db-footer-dot{width:6px;height:6px;border-radius:50%;background:#1D9E75;
+  animation:blink 2s ease-in-out infinite;flex-shrink:0}
+</style>
+
+<div class="db-page">
+
+  <!-- TOPBAR -->
+  <div class="db-topbar">
+    <div class="db-brand">
+      <div class="db-brand-icon">🏥</div>
+      <div>
+        <div class="db-brand-name">ICU Sepsis Early Warning</div>
+        <div class="db-brand-sub">Màn hình quan sát · Real-time</div>
+      </div>
+    </div>
+    <div class="db-topbar-right">
+      {% if critical > 0 %}
+      <div class="db-alert-btn">
+        <span class="db-alert-dot"></span>
+        {{ critical }} cảnh báo CRITICAL
+      </div>
+      {% endif %}
+      <div class="db-clock-wrap">
+        <div class="db-clock" id="db-clock">--:--:--</div>
+        <div class="db-clock-date" id="db-date">--/--/----</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="db-stats">
+    <div class="db-stat-card s-total">
+      <div class="db-stat-label">
+        <span class="db-stat-dot" style="background:#7F77DD"></span>
+        Tổng bệnh nhân
+      </div>
+      <div class="db-stat-num">{{ total }}</div>
+      <div class="db-stat-bar"></div>
+    </div>
+    <div class="db-stat-card s-critical">
+      <div class="db-stat-label">
+        <span class="db-stat-dot" style="background:#D4537E"></span>
+        Critical
+      </div>
+      <div class="db-stat-num">{{ critical }}</div>
+      <div class="db-stat-bar"
+        style="width:{% widthratio critical total 100 %}%"></div>
+    </div>
+    <div class="db-stat-card s-warning">
+      <div class="db-stat-label">
+        <span class="db-stat-dot" style="background:#EF9F27"></span>
+        Warning
+      </div>
+      <div class="db-stat-num">{{ warning }}</div>
+      <div class="db-stat-bar"
+        style="width:{% widthratio warning total 100 %}%"></div>
+    </div>
+    <div class="db-stat-card s-stable">
+      <div class="db-stat-label">
+        <span class="db-stat-dot" style="background:#1D9E75"></span>
+        Stable
+      </div>
+      <div class="db-stat-num">{{ stable }}</div>
+      <div class="db-stat-bar"
+        style="width:{% widthratio stable total 100 %}%"></div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="db-table-card">
+    <div class="db-table-header">
+      <div class="db-table-title">
+        <span class="db-title-dot"></span>
+        Danh sách bệnh nhân
+      </div>
+      <div class="db-ws-status">
+        <span class="db-ws-dot"></span> Kết nối real-time
+      </div>
+    </div>
+
+    <table class="db-table">
       <thead>
         <tr>
           <th>ID</th>
-          <th>Tên</th>
+          <th>Tên bệnh nhân</th>
           <th>Phòng</th>
-          <th style="min-width: 180px;">Risk Score</th>
+          <th>Risk score</th>
           <th>Mức độ</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {% for p in patients %}
-          <tr>
-            <td class="fw-semibold">{{ p.patient_id }}</td>
-            <td>{{ p.name }}</td>
-            <td>{{ p.room }}</td>
-            <td>
-              <div class="progress" role="progressbar" aria-label="risk" aria-valuenow="{{ p.risk_score|floatformat:2 }}" aria-valuemin="0" aria-valuemax="1">
-                {% if p.risk_level == 'CRITICAL' %}
-                <div class="progress-bar bg-danger" style="width: {{ p.risk_pct|floatformat:0 }}%;"></div>
-                {% elif p.risk_level == 'WARNING' %}
-                  <div class="progress-bar bg-warning" style="width: {{ p.risk_pct|floatformat:0 }}%;"></div>
-                {% else %}
-                  <div class="progress-bar bg-success" style="width: {{ p.risk_pct|floatformat:0 }}%;"></div>
-                {% endif %}
+        <tr data-patient-id="{{ p.patient_id }}"
+            class="row-{% if p.risk_level == 'CRITICAL' %}critical{% elif p.risk_level == 'WARNING' %}warning{% else %}stable{% endif %}">
+          <td><span class="db-patient-id">{{ p.patient_id }}</span></td>
+          <td><span class="db-patient-name">{{ p.name }}</span></td>
+          <td>
+            <span class="db-room-badge
+              {% if p.risk_level == 'CRITICAL' %}r-purple
+              {% elif p.risk_level == 'WARNING' %}r-amber
+              {% else %}r-teal{% endif %}">
+              {{ p.room }}
+            </span>
+          </td>
+          <td>
+            <div class="db-risk-wrap">
+              <div class="db-risk-bar-wrap">
+                <div class="db-risk-bar
+                  {% if p.risk_level == 'CRITICAL' %}critical
+                  {% elif p.risk_level == 'WARNING' %}warning
+                  {% else %}stable{% endif %}"
+                  style="width:{{ p.risk_pct|floatformat:0 }}%">
+                </div>
               </div>
-              <div class="small text-muted mt-1">{{ p.risk_score|floatformat:3 }}</div>
-            </td>
-            <td>
-              {% if p.risk_level == 'CRITICAL' %}
-                <span class="badge bg-danger">CRITICAL</span>
-              {% elif p.risk_level == 'WARNING' %}
-                <span class="badge bg-warning text-dark">WARNING</span>
-              {% else %}
-                <span class="badge bg-success">STABLE</span>
-              {% endif %}
-            </td>
-            <td class="text-end">
-              <a class="btn btn-sm btn-outline-primary" href="/patients/{{ p.patient_id }}/">Xem</a>
-            </td>
-          </tr>
+              <span class="db-risk-num">{{ p.risk_score|floatformat:3 }}</span>
+            </div>
+          </td>
+          <td>
+            <span class="db-level-badge
+              {% if p.risk_level == 'CRITICAL' %}critical
+              {% elif p.risk_level == 'WARNING' %}warning
+              {% else %}stable{% endif %}">
+              {{ p.risk_level }}
+            </span>
+          </td>
+          <td>
+            <a class="db-view-btn"
+               href="/patients/{{ p.patient_id }}/">Xem</a>
+          </td>
+        </tr>
         {% empty %}
-          <tr><td colspan="6" class="text-center text-muted py-4">Chưa có dữ liệu</td></tr>
+        <tr>
+          <td colspan="6"
+              style="text-align:center;color:#ccc;padding:2.5rem;font-size:13px">
+            Chưa có dữ liệu bệnh nhân
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
+
+    <div class="db-footer">
+      <span class="db-footer-dot"></span>
+      <span id="db-last-updated">Đang kết nối...</span>
+      &nbsp;·&nbsp; tự động tải lại mỗi 15 giây
+    </div>
   </div>
+
 </div>
 
 <script>
+  /* ── Đồng hồ real-time ── */
+  function tick() {
+    const now = new Date();
+    const clock = document.getElementById('db-clock');
+    const date  = document.getElementById('db-date');
+    const ts    = document.getElementById('db-last-updated');
+    if (clock) clock.textContent = now.toLocaleTimeString('vi-VN');
+    if (date)  date.textContent  = now.toLocaleDateString('vi-VN', {
+      weekday:'short', day:'2-digit', month:'2-digit', year:'numeric'
+    });
+    if (ts) ts.textContent = 'Cập nhật lúc: ' + now.toLocaleTimeString('vi-VN');
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  /* ── GIỮ NGUYÊN logic WebSocket cũ ── */
   const REFRESH_MS = 15000;
   let refreshTimer = setTimeout(() => location.reload(), REFRESH_MS);
 
@@ -97,19 +297,20 @@
 
   function connectWS() {
     const ws = new WebSocket(wsUrl);
-
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === "CRITICAL_ALERT") {
-        // Highlight row bệnh nhân có alert mới
-        const rows = document.querySelectorAll(`[data-patient-id="${msg.data.patient_id}"]`);
-        rows.forEach(r => r.style.outline = "2px solid red");
-        // Reload sau 1.5 giây để cập nhật risk score
+        const rows = document.querySelectorAll(
+          `[data-patient-id="${msg.data.patient_id}"]`
+        );
+        rows.forEach(r => {
+          r.style.outline = "2px solid #D4537E";
+          r.style.background = "rgba(212,83,126,.06)";
+        });
         clearTimeout(refreshTimer);
         refreshTimer = setTimeout(() => location.reload(), 1500);
       }
     };
-
     ws.onclose = () => setTimeout(connectWS, 5000);
   }
 
