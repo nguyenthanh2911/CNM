@@ -10,4 +10,5 @@ urlpatterns = [
     path("alerts/", views.alerts_page, name="alerts_page"),
     path("alerts/<str:alert_id>/acknowledge/", views.acknowledge_alert, name="acknowledge_alert"),
     path("api/patient/<str:patient_id>/latest/", views.patient_latest_api, name="patient_latest_api"),
+    path("api/alert-count/", views.alert_count_api, name="alert_count_api"),
 ]

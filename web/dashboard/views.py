@@ -372,3 +372,9 @@ def patient_latest_api(request: HttpRequest, patient_id: str) -> JsonResponse:
         },
         'shap_features': shap_features,
     })
+
+
+def alert_count_api(request: HttpRequest) -> JsonResponse:
+    """Trả về số alert pending để navbar hiển thị."""
+    pending = Alert.objects.filter(acknowledged=False).count()
+    return JsonResponse({"pending": pending})
