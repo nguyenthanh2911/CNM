@@ -140,7 +140,11 @@ def patient_detail(request: HttpRequest, patient_id: str) -> HttpResponse:
 
     # Determine pending critical alert for acknowledge button
     pending_alert = (
-        Alert.objects.filter(patient_id=patient_id, acknowledged=False, risk_level="CRITICAL")
+        Alert.objects.filter(
+            patient_id=patient_id,
+            acknowledged=False,
+            risk_level__iexact="CRITICAL"
+        )
         .order_by("-created_at")
         .first()
     )
@@ -225,14 +229,48 @@ def alerts_page(request: HttpRequest) -> HttpResponse:
 
     alert_url = getattr(settings, "ALERT_SERVICE_URL", "http://localhost:8002").rstrip("/")
 
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"[alerts_page] status={status} alert_url={alert_url}")
+
     alerts: List[Dict[str, Any]] = []
     try:
+        params: Dict[str, Any] = {"limit": 50}
+        if status != "all":
+            params["status"] = status
         with httpx.Client(timeout=5.0) as client:
-            resp = client.get(f"{alert_url}/alerts", params={"limit": 50, "status": status})
+            resp = client.get(f"{alert_url}/alerts", params=params)
             if resp.status_code == 200:
-                alerts = resp.json()
+                data = resp.json()
+                # Normalize risk_level về uppercase để hiển thị đồng nhất
+                for a in data:
+                    if "risk_level" in a:
+                        a["risk_level"] = str(a["risk_level"]).upper()
+                alerts = data
     except Exception:
         alerts = []
+
+    # Fallback: nếu alert_service không có data, đọc từ Django DB
+    if not alerts:
+        db_alerts = Alert.objects.all().order_by("-created_at")[:50]
+        if status == "pending":
+            db_alerts = Alert.objects.filter(acknowledged=False).order_by("-created_at")[:50]
+        elif status == "confirmed":
+            db_alerts = Alert.objects.filter(acknowledged=True).order_by("-created_at")[:50]
+        alerts = [
+            {
+                "alert_id": str(a.alert_id),
+                "patient_id": a.patient_id,
+                "risk_score": float(a.risk_score) if a.risk_score else 0.0,
+                "risk_level": str(a.risk_level or "").upper(),
+                "alert_type": getattr(a, "alert_type", "sepsis"),
+                "created_at": a.created_at.isoformat() if a.created_at else "",
+                "acknowledged": bool(a.acknowledged),
+                "ack_by": a.ack_by,
+                "ack_at": a.ack_at.isoformat() if a.ack_at else None,
+            }
+            for a in db_alerts
+        ]
 
     return render(
         request,
@@ -261,7 +299,11 @@ def acknowledge_alert(request: HttpRequest, alert_id: str) -> HttpResponse:
     except Exception:
         pass
 
-    return redirect(f"/alerts/?status=pending")
+    # Redirect về trang bệnh nhân nếu có referer, không thì về alerts
+    referer = request.META.get("HTTP_REFERER", "")
+    if "/patients/" in referer:
+        return redirect(referer)
+    return redirect("/alerts/?status=pending")
 
 
 def patient_latest_api(request: HttpRequest, patient_id: str) -> JsonResponse:
