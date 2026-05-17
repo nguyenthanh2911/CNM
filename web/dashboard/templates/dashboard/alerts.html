@@ -1,20 +1,111 @@
 {% extends "dashboard/base.html" %}
-
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0">Alerts</h3>
-  <div class="btn-group" role="group">
-    <a class="btn btn-outline-primary {% if status == 'all' %}active{% endif %}" href="/alerts/?status=all">Tất cả</a>
-    <a class="btn btn-outline-primary {% if status == 'pending' %}active{% endif %}" href="/alerts/?status=pending">Pending</a>
-    <a class="btn btn-outline-primary {% if status == 'confirmed' %}active{% endif %}" href="/alerts/?status=confirmed">Confirmed</a>
+
+<style>
+.al-page{padding:1rem;display:flex;flex-direction:column;gap:14px;font-family:inherit}
+
+/* Header */
+.al-header{display:flex;justify-content:space-between;align-items:center}
+.al-title{font-size:18px;font-weight:500;color:#1a1a1a;display:flex;align-items:center;gap:8px}
+.al-title-dot{width:9px;height:9px;border-radius:50%;
+  background:linear-gradient(135deg,#D4537E,#7F77DD);
+  animation:blink 1.4s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+.al-tabs{display:flex;gap:4px;background:#f5f5f7;padding:4px;border-radius:10px}
+.al-tab{padding:6px 16px;border-radius:7px;font-size:12px;font-weight:500;
+  color:#888;text-decoration:none;transition:background .2s,color .2s}
+.al-tab.active{background:#fff;color:#7F77DD;
+  box-shadow:0 1px 4px rgba(127,119,221,.15)}
+
+/* Table card */
+.al-card{background:#fff;border:0.5px solid #f0f0f0;border-radius:14px;
+  overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.03)}
+.al-card-header{padding:12px 18px;border-bottom:0.5px solid #f5f5f5;
+  font-size:11px;color:#aaa;display:flex;justify-content:space-between;align-items:center}
+.al-count{background:#EEEDFE;color:#534AB7;font-size:11px;
+  padding:2px 10px;border-radius:20px;font-weight:500}
+
+table.al-table{width:100%;border-collapse:collapse}
+table.al-table thead tr{
+  background:linear-gradient(135deg,rgba(127,119,221,.05),rgba(212,83,126,.04))}
+table.al-table th{padding:10px 16px;font-size:11px;font-weight:500;color:#aaa;
+  text-transform:uppercase;letter-spacing:.5px;border-bottom:0.5px solid #f0f0f0}
+table.al-table td{padding:12px 16px;font-size:13px;color:#333;
+  border-bottom:0.5px solid #fafafa;vertical-align:middle}
+table.al-table tbody tr{transition:background .15s}
+table.al-table tbody tr:hover{background:rgba(127,119,221,.02)}
+table.al-table tbody tr:last-child td{border-bottom:none}
+table.al-table tbody tr.row-pending{border-left:3px solid #D4537E}
+table.al-table tbody tr.row-confirmed{border-left:3px solid #1D9E75;opacity:.7}
+
+.al-id{font-size:11px;color:#bbb;font-family:monospace}
+.al-patient-link{color:#7F77DD;font-weight:500;text-decoration:none;font-size:13px}
+.al-patient-link:hover{text-decoration:underline}
+.al-time{font-size:12px;color:#888}
+
+.al-badge{display:inline-block;font-size:11px;padding:3px 10px;
+  border-radius:20px;font-weight:500}
+.al-badge.critical{background:linear-gradient(135deg,#D4537E,#7F77DD);color:#fff}
+.al-badge.warning{background:linear-gradient(135deg,#EF9F27,#D4537E);color:#fff}
+.al-badge.other{background:#f3f3f5;color:#888}
+
+.al-status-pending{display:inline-flex;align-items:center;gap:5px;
+  font-size:11px;color:#D4537E;font-weight:500}
+.al-status-pending::before{content:'';width:6px;height:6px;border-radius:50%;
+  background:#D4537E;animation:blink 1.4s ease-in-out infinite}
+.al-status-confirmed{display:inline-flex;align-items:center;gap:5px;
+  font-size:11px;color:#1D9E75;font-weight:500}
+.al-status-confirmed::before{content:'';width:6px;height:6px;
+  border-radius:50%;background:#1D9E75}
+
+.al-confirm-btn{padding:5px 14px;border:0.5px solid rgba(212,83,126,.3);
+  border-radius:8px;font-size:12px;color:#D4537E;background:transparent;
+  cursor:pointer;transition:background .2s,color .2s,border-color .2s}
+.al-confirm-btn:hover{background:linear-gradient(135deg,#D4537E,#7F77DD);
+  color:#fff;border-color:transparent}
+
+.al-empty{text-align:center;color:#ccc;padding:3rem;font-size:13px}
+
+/* Toast */
+.al-toast-wrap{position:fixed;top:1rem;right:1rem;z-index:9999;
+  display:flex;flex-direction:column;gap:8px}
+.al-toast{background:#fff;border:0.5px solid #f0f0f0;border-radius:12px;
+  padding:12px 16px;box-shadow:0 4px 20px rgba(0,0,0,.1);
+  min-width:260px;animation:slide-in .3s ease}
+@keyframes slide-in{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+.al-toast.critical{border-left:3px solid #D4537E}
+.al-toast-title{font-size:12px;font-weight:500;color:#1a1a1a;margin-bottom:3px}
+.al-toast-body{font-size:11px;color:#888}
+</style>
+
+<div class="al-page">
+
+  <!-- Header -->
+  <div class="al-header">
+    <div class="al-title">
+      <span class="al-title-dot"></span>
+      Alerts
+    </div>
+    <div class="al-tabs">
+      <a class="al-tab {% if status == 'all' %}active{% endif %}"
+         href="/alerts/?status=all">Tất cả</a>
+      <a class="al-tab {% if status == 'pending' %}active{% endif %}"
+         href="/alerts/?status=pending">Pending</a>
+      <a class="al-tab {% if status == 'confirmed' %}active{% endif %}"
+         href="/alerts/?status=confirmed">Confirmed</a>
+    </div>
   </div>
-</div>
 
-<div id="toastContainer" class="position-fixed top-0 end-0 p-3" style="z-index: 1080;"></div>
+  <!-- Toast container -->
+  <div class="al-toast-wrap" id="toastContainer"></div>
 
-<div class="card">
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
+  <!-- Table -->
+  <div class="al-card">
+    <div class="al-card-header">
+      <span>Danh sách cảnh báo</span>
+      <span class="al-count">{{ alerts|length }} alerts</span>
+    </div>
+    <table class="al-table">
       <thead>
         <tr>
           <th>ID</th>
@@ -27,74 +118,120 @@
       </thead>
       <tbody>
         {% for a in alerts %}
-          <tr>
-            <td class="fw-semibold">{{ a.alert_id }}</td>
-            <td><a href="/patients/{{ a.patient_id }}/">{{ a.patient_id }}</a></td>
-            <td>{{ a.created_at }}</td>
-            <td>
-              {% if a.risk_level == 'CRITICAL' %}
-                <span class="badge bg-danger">CRITICAL</span>
-              {% elif a.risk_level == 'WARNING' %}
-                <span class="badge bg-warning text-dark">WARNING</span>
-              {% else %}
-                <span class="badge bg-secondary">{{ a.risk_level }}</span>
+        <tr class="{% if a.acknowledged %}row-confirmed{% else %}row-pending{% endif %}">
+          <td><span class="al-id">{{ a.alert_id|slice:":8" }}…</span></td>
+          <td>
+            <a class="al-patient-link"
+               href="/patients/{{ a.patient_id }}/">{{ a.patient_id }}</a>
+          </td>
+          <td>
+            <span class="al-time">
+              {% if a.created_at %}
+                {{ a.created_at|slice:":19"|default:a.created_at }}
               {% endif %}
-            </td>
-            <td>
-              {% if a.acknowledged %}
-                <span class="badge bg-success">Confirmed</span>
-              {% else %}
-                <span class="badge bg-secondary">Pending</span>
-              {% endif %}
-            </td>
-            <td class="text-end">
-              {% if not a.acknowledged %}
-                <form method="post" action="/alerts/{{ a.alert_id }}/acknowledge/" class="d-inline">
-                  {% csrf_token %}
-                  <input type="hidden" name="ack_by" value="dashboard" />
-                  <button type="submit" class="btn btn-sm btn-outline-success">Confirm</button>
-                </form>
-              {% endif %}
-            </td>
-          </tr>
+            </span>
+          </td>
+          <td>
+            {% if a.risk_level == 'CRITICAL' %}
+              <span class="al-badge critical">CRITICAL</span>
+            {% elif a.risk_level == 'WARNING' %}
+              <span class="al-badge warning">WARNING</span>
+            {% else %}
+              <span class="al-badge other">{{ a.risk_level }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if a.acknowledged %}
+              <span class="al-status-confirmed">Confirmed</span>
+            {% else %}
+              <span class="al-status-pending">Pending</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right">
+            {% if not a.acknowledged %}
+            <form method="post"
+                  action="/alerts/{{ a.alert_id }}/acknowledge/"
+                  style="display:inline"
+                  onsubmit="handleConfirm(event, this, '{{ a.patient_id }}')">
+              {% csrf_token %}
+              <input type="hidden" name="ack_by" value="dashboard" />
+              <button type="submit" class="al-confirm-btn">Confirm</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
         {% empty %}
-          <tr><td colspan="6" class="text-center text-muted py-4">Chưa có alerts</td></tr>
+        <tr>
+          <td colspan="6" class="al-empty">Chưa có alerts</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+
 </div>
 
 <script>
-  function showToast(title, body) {
-    const container = document.getElementById('toastContainer');
-    const id = 't' + Math.random().toString(36).slice(2);
-    const html = `
-      <div id="${id}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-        <div class="toast-header">
-          <strong class="me-auto">${title}</strong>
-          <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
-        </div>
-        <div class="toast-body">${body}</div>
-      </div>
-    `;
-    container.insertAdjacentHTML('beforeend', html);
-    const toastEl = document.getElementById(id);
-    const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
-    toast.show();
-  }
+/* Confirm với optimistic UI — ẩn row ngay, không đợi reload */
+function handleConfirm(event, form, patientId) {
+  event.preventDefault();
 
-  const ws = new WebSocket('ws://localhost:8002/ws/all');
+  const row = form.closest('tr');
+  const btn = form.querySelector('button');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  fetch(form.action, {
+    method: 'POST',
+    body: new FormData(form),
+    headers: {'X-Requested-With': 'XMLHttpRequest'},
+    redirect: 'manual',
+  })
+  .then(() => {
+    // Cập nhật UI ngay không cần reload
+    const statusCell = row.querySelector('.al-status-pending');
+    if (statusCell) {
+      statusCell.className = 'al-status-confirmed';
+      statusCell.textContent = 'Confirmed';
+    }
+    form.remove();
+    row.classList.remove('row-pending');
+    row.classList.add('row-confirmed');
+    showToast('Đã xác nhận', `Alert của ${patientId} đã được confirm`);
+  })
+  .catch(() => {
+    btn.disabled = false;
+    btn.textContent = 'Confirm';
+  });
+}
+
+/* Toast */
+function showToast(title, body) {
+  const container = document.getElementById('toastContainer');
+  const div = document.createElement('div');
+  div.className = 'al-toast critical';
+  div.innerHTML = `<div class="al-toast-title">${title}</div>
+                   <div class="al-toast-body">${body}</div>`;
+  container.appendChild(div);
+  setTimeout(() => div.remove(), 4000);
+}
+
+/* WebSocket alert mới */
+const wsUrl = `ws://${location.host.replace('8000','8002')}/ws/all`;
+function connectWS() {
+  const ws = new WebSocket(wsUrl);
   ws.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data);
       if (msg.type === 'CRITICAL_ALERT') {
-        showToast('CRITICAL ALERT', `Patient ${msg.data.patient_id} risk=${msg.data.risk_score}`);
-        setTimeout(() => location.reload(), 700);
+        showToast('CRITICAL ALERT',
+          `Patient ${msg.data.patient_id} — risk ${msg.data.risk_score}`);
+        setTimeout(() => location.reload(), 1500);
       }
-    } catch (e) {
-      // ignore
-    }
+    } catch(e) {}
   };
+  ws.onclose = () => setTimeout(connectWS, 5000);
+}
+connectWS();
 </script>
 {% endblock %}

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -288,7 +288,9 @@ def acknowledge_alert(request: HttpRequest, alert_id: str) -> HttpResponse:
         return redirect("alerts_page")
 
     ack_by = request.POST.get("ack_by", "dashboard")
+    now = datetime.now(timezone.utc)
 
+    # 1. Gọi alert_service PATCH
     alert_url = getattr(settings, "ALERT_SERVICE_URL", "http://localhost:8002").rstrip("/")
     try:
         with httpx.Client(timeout=5.0) as client:
@@ -299,7 +301,18 @@ def acknowledge_alert(request: HttpRequest, alert_id: str) -> HttpResponse:
     except Exception:
         pass
 
-    # Redirect về trang bệnh nhân nếu có referer, không thì về alerts
+    # 2. Cập nhật Django DB đồng bộ
+    try:
+        from django.utils import timezone as dj_tz
+        Alert.objects.filter(alert_id=alert_id).update(
+            acknowledged=True,
+            ack_by=ack_by,
+            ack_at=dj_tz.now(),
+        )
+    except Exception:
+        pass
+
+    # 3. Redirect về đúng chỗ
     referer = request.META.get("HTTP_REFERER", "")
     if "/patients/" in referer:
         return redirect(referer)
