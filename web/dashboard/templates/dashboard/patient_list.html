@@ -105,6 +105,45 @@ table.db-table tbody tr.row-stable  {border-left:3px solid #1D9E75}
 .db-risk-bar.stable  {background:linear-gradient(90deg,#1D9E75,#378ADD)}
 .db-risk-num{font-size:11px;color:#bbb}
 
+  /* Confirmed row — nền xanh nhẹ, xuống cuối */
+  table.db-table tbody tr.row-confirmed-patient{
+    background:linear-gradient(135deg,
+      rgba(29,158,117,.06),
+      rgba(55,138,221,.04)) !important;
+    border-left:3px solid #1D9E75 !important;
+    opacity:.85}
+  table.db-table tbody tr.row-confirmed-patient td{color:#666}
+  table.db-table tbody tr.row-confirmed-patient .db-patient-id{color:#1D9E75}
+  .confirmed-tag{display:inline-flex;align-items:center;gap:4px;
+    font-size:10px;color:#1D9E75;background:#E1F5EE;
+    padding:2px 8px;border-radius:20px;margin-left:6px}
+
+  /* Highlight animation khi vừa confirm (từ URL param) */
+  @keyframes highlight-confirmed{
+    0%  {background:rgba(29,158,117,.18);box-shadow:0 0 0 2px rgba(29,158,117,.3)}
+    70% {background:rgba(29,158,117,.18);box-shadow:0 0 0 2px rgba(29,158,117,.3)}
+    100%{background:linear-gradient(135deg,rgba(29,158,117,.06),rgba(55,138,221,.04));
+         box-shadow:none}
+  }
+  table.db-table tbody tr.just-confirmed{
+    animation:highlight-confirmed 2.5s ease forwards}
+
+  /* CRITICAL glow animation — nhẹ nhàng hơn */
+  @keyframes glow-critical{
+    0%,100%{box-shadow:none}
+    50%{box-shadow:0 0 12px rgba(212,83,126,.18)}
+  }
+  table.db-table tbody tr.row-critical{
+    animation:glow-critical 3s ease-in-out infinite}
+
+  /* WARNING glow — nhẹ hơn */
+  @keyframes glow-warning{
+    0%,100%{box-shadow:none}
+    50%{box-shadow:0 0 10px rgba(239,159,39,.15)}
+  }
+  table.db-table tbody tr.row-warning{
+    animation:glow-warning 4s ease-in-out infinite}
+
 .db-level-badge{display:inline-block;font-size:11px;
   padding:3px 10px;border-radius:20px;font-weight:500}
 .db-level-badge.critical{background:linear-gradient(135deg,#D4537E,#7F77DD);color:#fff}
@@ -216,9 +255,15 @@ table.db-table tbody tr.row-stable  {border-left:3px solid #1D9E75}
       <tbody>
         {% for p in patients %}
         <tr data-patient-id="{{ p.patient_id }}"
-            class="row-{% if p.risk_level == 'CRITICAL' %}critical{% elif p.risk_level == 'WARNING' %}warning{% else %}stable{% endif %}">
+            data-confirmed="{{ p.is_confirmed|yesno:'true,false' }}"
+            class="{% if p.is_confirmed %}row-confirmed-patient{% else %}row-{% if p.risk_level == 'CRITICAL' %}critical{% elif p.risk_level == 'WARNING' %}warning{% else %}stable{% endif %}{% endif %}">
           <td><span class="db-patient-id">{{ p.patient_id }}</span></td>
-          <td><span class="db-patient-name">{{ p.name }}</span></td>
+          <td>
+            <span class="db-patient-name">{{ p.name }}</span>
+            {% if p.is_confirmed %}
+              <span class="confirmed-tag">✓ Đã xác nhận</span>
+            {% endif %}
+          </td>
           <td>
             <span class="db-room-badge
               {% if p.risk_level == 'CRITICAL' %}r-purple
@@ -312,6 +357,20 @@ table.db-table tbody tr.row-stable  {border-left:3px solid #1D9E75}
       }
     };
     ws.onclose = () => setTimeout(connectWS, 5000);
+  }
+
+  // Highlight bệnh nhân vừa được confirm (từ URL ?confirmed=PID)
+  const urlParams = new URLSearchParams(window.location.search);
+  const confirmedPid = urlParams.get('confirmed');
+  if (confirmedPid) {
+    const row = document.querySelector(`[data-patient-id="${confirmedPid}"]`);
+    if (row) {
+      row.classList.add('just-confirmed');
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    // Xóa param khỏi URL để không highlight lại khi refresh
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, '', cleanUrl);
   }
 
   connectWS();

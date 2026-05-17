@@ -49,6 +49,12 @@ def patient_list(request: HttpRequest) -> HttpResponse:
         digits = "".join([c for c in row.patient_id if c.isdigit()])
         room = f"ICU-{int(digits or 0) % 10:02d}"
 
+        # Kiểm tra bệnh nhân đã được acknowledge chưa
+        is_confirmed = Alert.objects.filter(
+            patient_id=row.patient_id,
+            acknowledged=True
+        ).exists()
+
         patients.append(
             {
                 "patient_id": row.patient_id,
@@ -58,8 +64,12 @@ def patient_list(request: HttpRequest) -> HttpResponse:
                 "risk_pct": float(row.risk_score) * 100.0,
                 "risk_level": badge,
                 "timestamp": row.timestamp,
+                "is_confirmed": is_confirmed,
             }
         )
+
+    # Sort: confirmed xuống cuối, trong mỗi nhóm sort theo risk_score giảm dần
+    patients.sort(key=lambda p: (1 if p["is_confirmed"] else 0, -p["risk_score"]))
 
     total = len(patients)
     stable = max(total - critical - warning, 0)
@@ -313,9 +323,17 @@ def acknowledge_alert(request: HttpRequest, alert_id: str) -> HttpResponse:
         pass
 
     # 3. Redirect về đúng chỗ
+    # Lấy patient_id từ Alert DB để redirect về danh sách với highlight
+    try:
+        alert_obj = Alert.objects.filter(alert_id=alert_id).first()
+        pid = alert_obj.patient_id if alert_obj else None
+    except Exception:
+        pid = None
+
     referer = request.META.get("HTTP_REFERER", "")
-    if "/patients/" in referer:
-        return redirect(referer)
+    if pid and "/patients/" in referer:
+        # Quay về danh sách bệnh nhân, highlight patient vừa confirm
+        return redirect(f"/?confirmed={pid}")
     return redirect("/alerts/?status=pending")
 
 
