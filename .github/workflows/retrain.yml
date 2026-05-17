@@ -36,6 +36,9 @@ jobs:
           DATABASE_URL: postgresql+psycopg2://sepsis_user:sepsis_pass@localhost:5432/sepsis_db
         run: python scripts/ci_seed_data.py
 
+      - name: Generate drift data (current)
+        run: python scripts/make_drift_data.py
+
       - name: Run retrain flow
         env:
           MLFLOW_TRACKING_URI: http://localhost:5000
