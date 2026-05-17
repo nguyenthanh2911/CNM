@@ -117,14 +117,14 @@
       <div class="pd-charts-row">
         <div class="pd-chart-card">
           <div class="pd-chart-title">Biểu đồ risk score — 2 giờ gần nhất</div>
-          <canvas id="riskChart" height="110"></canvas>
+          <canvas id="riskChart" height="140"></canvas>
         </div>
         <div class="pd-chart-card">
           <div class="pd-chart-title">Top 5 SHAP features</div>
-          <canvas id="shapChart" height="160"></canvas>
-          <div id="no-shap-msg" class="pd-no-shap">
-            {% if not shap_features %}Chưa có dữ liệu SHAP{% endif %}
-          </div>
+          <canvas id="shapChart" height="120"></canvas>
+          {% if not shap_features %}
+          <div id="no-shap-msg" class="pd-no-shap">Chưa có dữ liệu SHAP</div>
+          {% endif %}
         </div>
       </div>
 
@@ -139,7 +139,8 @@
 
 <style>
 /* ── Reset & page ───────────────────────── */
-.pd-page{padding:1rem;display:flex;flex-direction:column;gap:12px;font-family:inherit}
+.pd-page{padding:1rem;display:flex;flex-direction:column;gap:12px;font-family:inherit;
+  min-height:calc(100vh - 56px);box-sizing:border-box}
 
 /* ── Topbar ─────────────────────────────── */
 .pd-topbar{display:flex;justify-content:space-between;align-items:center;
@@ -162,20 +163,20 @@
 .pd-ack-btn:hover{opacity:.9}
 
 /* ── Main grid ──────────────────────────── */
-.pd-main-grid{display:grid;grid-template-columns:200px 1fr;gap:12px}
-.pd-left-panel{display:flex;flex-direction:column;gap:12px}
+.pd-main-grid{display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:stretch}
+.pd-left-panel{display:flex;flex-direction:column;gap:12px;min-height:100%}
 .pd-right-panel{display:flex;flex-direction:column;gap:12px}
 
 /* ── Risk card ──────────────────────────── */
 .pd-risk-card{background:#fff;border:1px solid #f0f0f0;border-radius:14px;
   padding:1.25rem;text-align:center;position:relative;overflow:hidden;
-  box-shadow:0 2px 8px rgba(127,119,221,.07)}
+  box-shadow:0 2px 8px rgba(127,119,221,.07);flex:1}
 .pd-risk-card::before{content:'';position:absolute;top:-40px;left:-40px;
   width:140px;height:140px;background:radial-gradient(circle,rgba(212,83,126,.1),transparent 70%);
   pointer-events:none;animation:spin-glow 8s linear infinite}
 @keyframes spin-glow{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 .pd-risk-label{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
-.pd-risk-number{font-size:52px;font-weight:500;line-height:1;
+.pd-risk-number{font-size:60px;font-weight:500;line-height:1;
   background:linear-gradient(135deg,#D4537E,#7F77DD);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
   animation:pulse-risk 2.5s ease-in-out infinite}
@@ -190,7 +191,7 @@
 
 /* ── Early warning card ─────────────────── */
 .pd-ew-card{background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:1rem;
-  box-shadow:0 2px 8px rgba(127,119,221,.05)}
+  box-shadow:0 2px 8px rgba(127,119,221,.05);flex:1}
 .pd-ew-title{font-size:11px;font-weight:500;color:#888;margin-bottom:10px;
   display:flex;align-items:center;gap:6px}
 .pd-ew-dot{width:7px;height:7px;border-radius:50%;
@@ -210,17 +211,17 @@
 /* ── Vitals grid ────────────────────────── */
 .pd-vitals-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .pd-vital-card{background:#fff;border:1px solid #f0f0f0;border-radius:10px;
-  padding:10px 8px;text-align:center;
+  padding:14px 10px;text-align:center;
   transition:transform .2s ease,box-shadow .2s ease}
 .pd-vital-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(127,119,221,.12)}
 .pd-vital-label{font-size:10px;color:#aaa;margin-bottom:4px}
-.pd-vital-val{font-size:18px;font-weight:500}
+.pd-vital-val{font-size:22px;font-weight:500}
 .pd-vital-abnormal{color:#D4537E}
 .pd-vital-normal{color:#1D9E75}
 .pd-vital-unit{font-size:9px;color:#ccc;margin-top:2px}
 
 /* ── Charts ─────────────────────────────── */
-.pd-charts-row{display:grid;grid-template-columns:1fr 200px;gap:12px}
+.pd-charts-row{display:grid;grid-template-columns:1fr 240px;gap:12px}
 .pd-chart-card{background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:1rem;
   box-shadow:0 1px 4px rgba(0,0,0,.03)}
 .pd-chart-title{font-size:11px;font-weight:500;color:#999;margin-bottom:10px}
