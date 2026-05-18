@@ -36,15 +36,17 @@ class PhysiologicalModel:
     hr_baseline: float = 0.0
     temp_baseline: float = 0.0
     spo2_baseline: float = 0.0
+    sepsis_onset_hour: Optional[int] = None  # giờ bắt đầu sepsis thực sự
 
     def _severity_factor(self) -> float:
-        """Returns a 0..1 factor; after hour 12 sepsis worsens gradually."""
+        """Returns a 0..1 factor; after onset hour sepsis worsens gradually."""
         if not self.has_sepsis:
             return 0.0
-        if self.current_hour <= 12:
+        onset = self.sepsis_onset_hour if self.sepsis_onset_hour is not None else 12
+        if self.current_hour <= onset:
             return 0.0
-        # ramp from hour 12 -> 24 (or beyond) smoothly
-        return _clamp((self.current_hour - 12) / 12.0, 0.0, 1.0)
+        # ramp from onset -> onset+12 gradually
+        return _clamp((self.current_hour - onset) / 12.0, 0.0, 1.0)
 
     def _severity_scale(self) -> float:
         # Severity affects how strongly the patient drifts into septic ranges.
@@ -287,6 +289,12 @@ class ICUSepsisGenerator:
             nonsepsis_mild_abnormal_labs = (not has_sepsis) and (np.random.rand() < 0.25)
             sepsis_early_normal_labs = has_sepsis and (np.random.rand() < 0.20)
 
+            # Sepsis onset: random trong khoảng giờ 8–18 (giữa ca trực)
+            # Non-sepsis patients: onset_hour = None
+            onset_hour: Optional[int] = None
+            if has_sepsis:
+                onset_hour = int(np.random.randint(8, min(19, self.hours)))
+
             self._patients[patient_id] = PhysiologicalModel(
                 patient_id=patient_id,
                 age=age,
@@ -299,6 +307,7 @@ class ICUSepsisGenerator:
                 hr_baseline=float(np.random.uniform(58, 92)),
                 temp_baseline=float(np.random.uniform(36.1, 37.6)),
                 spo2_baseline=float(np.random.uniform(95, 99)),
+                sepsis_onset_hour=onset_hour,
             )
             self._sepsis_by_patient[patient_id] = has_sepsis
             self._stream_index_by_patient[patient_id] = 0
@@ -336,6 +345,7 @@ class ICUSepsisGenerator:
             **labs,
             "sepsis_label": int(patient.has_sepsis),
             "early_warning_label": early_warning_label,
+            "sepsis_onset_hour": patient.sepsis_onset_hour,  # None nếu không có sepsis
         }
         return record
 
@@ -376,6 +386,7 @@ class ICUSepsisGenerator:
             "platelet",
             "sepsis_label",
             "early_warning_label",
+            "sepsis_onset_hour",
         ]
         df = df[desired_cols]
         df.to_csv(output_path, index=False)
@@ -414,6 +425,7 @@ class ICUSepsisGenerator:
             "platelet",
             "sepsis_label",
             "early_warning_label",
+            "sepsis_onset_hour",
         ]
         return df[desired_cols]
 
