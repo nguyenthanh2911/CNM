@@ -32,7 +32,6 @@ FEATURE_COLS: List[str] = [
 
 # ── Label mới: T+6h thay vì label tĩnh ──────────────────────────────
 LABEL_COL = LABEL_COL_T6H          # "sepsis_in_next_6h"
-LABEL_COL_LEGACY = "sepsis_label"  # giữ để reference, không dùng train
 
 
 def _parse_args() -> argparse.Namespace:
@@ -98,6 +97,11 @@ if __name__ == "__main__":
     X_train_p = preprocess_pipeline.fit_transform(X_train)
     X_val_p   = preprocess_pipeline.transform(X_val)
     X_test_p  = preprocess_pipeline.transform(X_test)
+
+    # Convert numpy arrays back to DataFrames để giữ feature names (XGBoost cần)
+    X_train_p = pd.DataFrame(X_train_p, columns=FEATURE_COLS) if not isinstance(X_train_p, pd.DataFrame) else X_train_p
+    X_val_p   = pd.DataFrame(X_val_p, columns=FEATURE_COLS) if not isinstance(X_val_p, pd.DataFrame) else X_val_p
+    X_test_p  = pd.DataFrame(X_test_p, columns=FEATURE_COLS) if not isinstance(X_test_p, pd.DataFrame) else X_test_p
 
     os.makedirs("artifacts", exist_ok=True)
     joblib.dump(preprocess_pipeline, "artifacts/preprocessor_t6h.joblib")

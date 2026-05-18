@@ -330,21 +330,12 @@ class ICUSepsisGenerator:
             sepsis_early_normal=bool(getattr(patient, "sepsis_early_normal_labs", False)),
         )
 
-        # Early warning label: bệnh nhân có sepsis và sắp chuyển nặng
-        early_warning_label = 0
-        if patient.has_sepsis:
-            if 11 <= hour < 12:
-                early_warning_label = 1  # sắp sepsis trong 30-60 phút
-            elif 10 <= hour < 11:
-                early_warning_label = 1  # sắp sepsis trong 60-120 phút
-
         record: Dict[str, Any] = {
             "patient_id": patient_id,
             "timestamp": timestamp.isoformat(),
             **vitals,
             **labs,
             "sepsis_label": int(patient.has_sepsis),
-            "early_warning_label": early_warning_label,
             "sepsis_onset_hour": patient.sepsis_onset_hour,  # None nếu không có sepsis
         }
         return record
@@ -385,7 +376,6 @@ class ICUSepsisGenerator:
             "bilirubin",
             "platelet",
             "sepsis_label",
-            "early_warning_label",
             "sepsis_onset_hour",
         ]
         df = df[desired_cols]
@@ -424,7 +414,6 @@ class ICUSepsisGenerator:
             "bilirubin",
             "platelet",
             "sepsis_label",
-            "early_warning_label",
             "sepsis_onset_hour",
         ]
         return df[desired_cols]
