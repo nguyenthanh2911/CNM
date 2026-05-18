@@ -2,9 +2,9 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [main, develop, ngythanh]
+    branches: [main, develop, update_t6h]
   pull_request:
-    branches: [main, ngythanh]
+    branches: [main, update_t6h]
 
 jobs:
   test:
@@ -55,7 +55,7 @@ jobs:
   build:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ngythanh'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/update_t6h'
     
     steps:
       - uses: actions/checkout@v4
