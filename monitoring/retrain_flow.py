@@ -41,7 +41,7 @@ def _get_production_auroc(model_name: str) -> Tuple[Optional[str], float]:
 
     v = versions[0]
     run = client.get_run(v.run_id)
-    auroc = float((run.data.metrics or {}).get("auroc", 0.0))
+    auroc = float((run.data.metrics or {}).get("test_auroc", 0.0))
     return v.run_id, auroc
 
 
@@ -100,7 +100,7 @@ def run_training(data_path: str, experiment_name: str, model_name: str) -> dict:
     mlflow.set_tracking_uri(_get_tracking_uri())
     run_id, metrics = _get_latest_run_metrics(experiment_name)
 
-    return {"auroc": float(metrics.get("auroc", 0.0)), "run_id": str(run_id or "")}
+    return {"auroc": float(metrics.get("test_auroc", 0.0)), "run_id": str(run_id or "")}
 
 
 @task
@@ -126,8 +126,8 @@ def compare_and_promote(new_metrics: dict, model_name: str) -> bool:
 def retrain_flow(
     reference_path: str = "data/processed/features_train.parquet",
     data_path: str = "data/synthetic/icu_data_synthetic.csv",
-    experiment_name: str = "sepsis_retrain",
-    model_name: str = "sepsis_xgboost",
+    experiment_name: str = "CNM-Sepsis-T6H",
+    model_name: str = "sepsis_xgboost_t6h",
 ):
     mlflow.set_tracking_uri(_get_tracking_uri())
 
