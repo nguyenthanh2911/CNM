@@ -357,7 +357,7 @@ async function fetchLatest(){
     const news2 = document.getElementById('news2-badge');
     if(sofa)  sofa.textContent  = 'SOFA: '  + d.sofa_score;
     if(news2) news2.textContent = 'NEWS2: ' + d.news2_score;
-— cập nhật giá trị + màu động theo ngưỡng */
+    /* cập nhật giá trị + màu động theo ngưỡng */
     const vitalRules = [
       { id:'v-hr',   val:d.heart_rate,         abnormal: v => v > 100 },
       { id:'v-spo2', val:d.spo2,               abnormal: v => v < 94  },
@@ -371,16 +371,24 @@ async function fetchLatest(){
       el.className = 'pd-vital-val ' +
         (r.abnormal(r.val) ? 'pd-vital-abnormal' : 'pd-vital-normal');
     }
+    
     /* BP riêng vì 2 giá trị */
     const bpEl = document.getElementById('v-bp');
     if(bpEl && d.systolic_bp !== undefined){
       bpEl.textContent = (d.systolic_bp?.toFixed(1)||'-') + ' / ' + (d.diastolic_bp?.toFixed(1)||'-');
       bpEl.className = 'pd-vital-val ' +
-        (d.systolic_bp < 90 ? 'pd-vital-abnormal' : 'pd-vital-normal')
+        (d.systolic_bp < 90 ? 'pd-vital-abnormal' : 'pd-vital-normal');
+    }
+
+    const setEW = (id1, id2, cls, val) => {
+      const el = document.getElementById(id1);
+      const bar = document.getElementById(id2);
       const pct = Math.round((val||0)*100);
       if(el)  el.textContent = pct;
       if(bar) bar.style.width = pct + '%';
     };
+
+    const ew = d.early_warning || {};
     setEW('ew-prob',  'ew-prob-bar',  'pd-bar-prob',  ew.early_warning_probability);
     setEW('ew-trend', 'ew-trend-bar', 'pd-bar-trend', ew.trend_score);
     setEW('ew-thresh','ew-thresh-bar','pd-bar-thresh', ew.threshold_score);

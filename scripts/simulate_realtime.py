@@ -45,6 +45,13 @@ def send_all(patients_data: list, step: int):
         for row in patients_data:
             pid = row["patient_id"]
             
+            # Đồng bộ ID: P0001 -> P001 để khớp với danh sách bệnh nhân đã seed
+            if pid.startswith("P") and len(pid) > 4:
+                try:
+                    pid = f"P{int(pid[1:]):03d}"
+                except ValueError:
+                    pass
+            
             # Trích xuất vitals
             vitals = {}
             for k, v in row.items():
