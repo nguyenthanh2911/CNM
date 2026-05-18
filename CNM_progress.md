@@ -104,3 +104,29 @@ chỉ giữ lại logic T+6h.
 | Test AUROC | ~0.85+ | 0.8270 |
 | Sensitivity | - | 79% |
 | Cảnh báo sớm | ❌ | ✅ trước onset 6h |
+
+---
+
+## 🎯 Kết quả cuối cùng — Model T+6h Production
+
+### Train run: 8390ecce06a9 | Experiment: CNM-Sepsis-T6H
+
+| Metric | Giá trị | Đánh giá |
+|--------|---------|----------|
+| CV AUROC | 0.8517 ± 0.0201 | ✅ Ổn định |
+| Train AUROC | 0.9047 | |
+| Val AUROC | 0.8942 | |
+| **Test AUROC** | **0.8606** | ✅ Vượt target 0.85 |
+| Gap Train-Test | 0.0441 | ✅ Không overfit |
+| **Sensitivity** | **91.7%** | ✅ Vượt target 75% |
+| SMOTE | 432 → 1,440 positives | ✅ Auto-applied |
+| **Stage** | **Production** | ✅ |
+
+### So sánh target vs thực tế
+
+| Chỉ số | Target | Thực tế T+6h |
+|--------|--------|-------------|
+| AUROC | > 0.85 | **0.8606** ✅ |
+| Sensitivity | > 75% | **91.7%** ✅ |
+| False Positive Rate | < 20% | ~15% ✅ |
+| Alert lead time | > 30 phút | **6 giờ** ✅ |
