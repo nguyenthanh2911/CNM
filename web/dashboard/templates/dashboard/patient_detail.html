@@ -256,11 +256,12 @@
 
 <script>
 const patientId = "{{ patient_id }}";
-const POLL_MS = 5000;
+const POLL_MS = 10000; // Khớp 10 giây của realtime data
 
 /* ── Chart.js khởi tạo ── */
 const riskSeries = JSON.parse(document.getElementById('risk-series-data').textContent);
 const shapData   = JSON.parse(document.getElementById('shap-data').textContent);
+let lastRiskTimestamp = riskSeries.length > 0 ? riskSeries[riskSeries.length - 1].t : null;
 
 /* Gradient cho risk line */
 const riskCanvas = document.getElementById('riskChart');
@@ -408,21 +409,22 @@ async function fetchLatest(){
     }
 
     /* risk chart */
-    if(d.timestamp){
+    if(d.timestamp && d.timestamp !== lastRiskTimestamp){
+      lastRiskTimestamp = d.timestamp;
       riskChart.data.labels.push(new Date(d.timestamp).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}));
       riskChart.data.datasets[0].data.push(d.risk_score);
       if(riskChart.data.labels.length > 24){
         riskChart.data.labels.shift();
         riskChart.data.datasets[0].data.shift();
       }
-      riskChart.update('none');
+      riskChart.update(); // Bật animation
     }
 
     /* SHAP */
     if(d.shap_features && d.shap_features.length > 0){
       shapChart.data.labels = d.shap_features.map(x=>x.feature);
       shapChart.data.datasets[0].data = d.shap_features.map(x=>x.shap_value);
-      shapChart.update('none');
+      shapChart.update(); // Bật animation
       const noShap = document.getElementById('no-shap-msg');
       if(noShap) noShap.style.display = 'none';
     }

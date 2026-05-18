@@ -312,7 +312,7 @@ table.db-table tbody tr.row-stable  {border-left:3px solid #1D9E75}
     <div class="db-footer">
       <span class="db-footer-dot"></span>
       <span id="db-last-updated">Đang kết nối...</span>
-      &nbsp;·&nbsp; tự động tải lại mỗi 15 giây
+      &nbsp;·&nbsp; Cập nhật 
     </div>
   </div>
 
@@ -334,9 +334,37 @@ table.db-table tbody tr.row-stable  {border-left:3px solid #1D9E75}
   tick();
   setInterval(tick, 1000);
 
-  /* ── GIỮ NGUYÊN logic WebSocket cũ ── */
-  const REFRESH_MS = 15000;
-  let refreshTimer = setTimeout(() => location.reload(), REFRESH_MS);
+  /* ── Auto-poll thay vì reload toàn trang ── */
+  const POLL_MS = 10000;
+  async function pollList() {
+    try {
+      const res = await fetch(window.location.href);
+      if(!res.ok) return;
+      const text = await res.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, 'text/html');
+      
+      const newTbody = doc.querySelector('table.db-table tbody');
+      const oldTbody = document.querySelector('table.db-table tbody');
+      if (newTbody && oldTbody) {
+        oldTbody.innerHTML = newTbody.innerHTML;
+      }
+      
+      const stats = ['s-total', 's-critical', 's-warning', 's-stable'];
+      stats.forEach(cls => {
+        const newVal = doc.querySelector(`.db-stat-card.${cls} .db-stat-num`);
+        const oldVal = document.querySelector(`.db-stat-card.${cls} .db-stat-num`);
+        if (newVal && oldVal) oldVal.textContent = newVal.textContent;
+        
+        const newBar = doc.querySelector(`.db-stat-card.${cls} .db-stat-bar`);
+        const oldBar = document.querySelector(`.db-stat-card.${cls} .db-stat-bar`);
+        if (newBar && oldBar) oldBar.style.width = newBar.style.width;
+      });
+    } catch(e) {
+      console.warn('Poll error:', e);
+    }
+  }
+  let refreshTimer = setInterval(pollList, POLL_MS);
 
   const wsUrl = `ws://${location.host.replace('8000','8002')}/ws/all`;
 
@@ -352,8 +380,7 @@ table.db-table tbody tr.row-stable  {border-left:3px solid #1D9E75}
           r.style.outline = "2px solid #D4537E";
           r.style.background = "rgba(212,83,126,.06)";
         });
-        clearTimeout(refreshTimer);
-        refreshTimer = setTimeout(() => location.reload(), 1500);
+        pollList(); // Tải luôn dữ liệu mới khi có critical
       }
     };
     ws.onclose = () => setTimeout(connectWS, 5000);
