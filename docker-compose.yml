@@ -116,6 +116,10 @@ services:
       - ML_SERVICE_URL=http://ml_service:8001
       - ALERT_SERVICE_URL=http://alert_service:8002/alerts
       - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=1
+    volumes:
+      - ./web/dashboard/templates:/app/web/dashboard/templates
+      - ./web/dashboard/static:/app/web/dashboard/static
     depends_on:
       - postgres
       - ml_service
