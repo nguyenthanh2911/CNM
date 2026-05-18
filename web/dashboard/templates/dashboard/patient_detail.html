@@ -88,34 +88,30 @@
       <!-- Vitals Grid (5 cards) -->
       <div class="pd-vitals-grid">
         <div class="pd-vital-card">
-          <div class="pd-vital-label">Heart R{% if vitals.heart_rate and vitals.heart_rate > 100 %}pd-vital-abnormal{% elif vitals.heart_rate %}pd-vital-normal{% endif %}">
-            {{ vitals.heart_rate|default:"-" }}</div>
+          <div class="pd-vital-label">Heart Rate</div>
+          <div id="v-hr" class="pd-vital-val">{{ vitals.heart_rate|default:"-" }}</div>
           <div class="pd-vital-unit">bpm</div>
         </div>
         <div class="pd-vital-card">
           <div class="pd-vital-label">Blood Pressure</div>
-          <div id="v-bp" class="pd-vital-val {% if vitals.systolic_bp and vitals.systolic_bp < 90 %}pd-vital-abnormal{% elif vitals.systolic_bp %}pd-vital-normal{% endif %}">
+          <div id="v-bp" class="pd-vital-val">
             {{ vitals.systolic_bp|default:"-" }} / {{ vitals.diastolic_bp|default:"-" }}
           </div>
           <div class="pd-vital-unit">mmHg</div>
         </div>
         <div class="pd-vital-card">
           <div class="pd-vital-label">SpO2</div>
-          <div id="v-spo2" class="pd-vital-val {% if vitals.spo2 and vitals.spo2 < 94 %}pd-vital-abnormal{% elif vitals.spo2 %}pd-vital-normal{% endif %}">
-            {{ vitals.spo2|default:"-" }}</div>
+          <div id="v-spo2" class="pd-vital-val">{{ vitals.spo2|default:"-" }}</div>
           <div class="pd-vital-unit">%</div>
         </div>
         <div class="pd-vital-card">
           <div class="pd-vital-label">Temperature</div>
-          <div id="v-temp" class="pd-vital-val {% if vitals.temperature and vitals.temperature > 38.3 %}pd-vital-abnormal{% elif vitals.temperature %}pd-vital-normal{% endif %}">
-            {{ vitals.temperature|default:"-" }}</div>
+          <div id="v-temp" class="pd-vital-val">{{ vitals.temperature|default:"-" }}</div>
           <div class="pd-vital-unit">°C</div>
         </div>
         <div class="pd-vital-card">
           <div class="pd-vital-label">Resp. Rate</div>
-          <div id="v-rr" class="pd-vital-val {% if vitals.respiratory_rate and vitals.respiratory_rate > 20 %}pd-vital-abnormal{% elif vitals.respiratory_rate %}pd-vital-normal{% endif %}">
-            
-          <div id="v-rr" class="pd-vital-val pd-vital-abnormal">{{ vitals.respiratory_rate|default:"-" }}</div>
+          <div id="v-rr" class="pd-vital-val">{{ vitals.respiratory_rate|default:"-" }}</div>
           <div class="pd-vital-unit">/min</div>
         </div>
       </div>
