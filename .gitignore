@@ -100,7 +100,8 @@ mlruns/
 *.parquet
 
 # Model / pipeline artifacts
-artifacts/preprocessor.joblib
+artifacts/
+*.joblib
 
 
 # Data files
