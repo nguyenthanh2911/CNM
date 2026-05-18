@@ -49,9 +49,8 @@
       </div>
 
       <!-- Early Warning Card -->
-      {% if early_warning %}Nguy cơ Sepsis — 6h tới
-        </div>
-        <div class="pd-ew-desc">Xác suất khởi phát trong 6 giờ tớiiv id="ew-banner" class="pd-ew-card">
+      {% if early_warning %}
+      <div id="ew-banner" class="pd-ew-card">
         <div class="pd-ew-title">
           <span class="pd-ew-dot"></span> Cảnh báo sớm
         </div>
@@ -223,7 +222,7 @@
   transition:transform .2s ease,box-shadow .2s ease}
 .pd-vital-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(127,119,221,.12)}
 .pd-vital-label{font-size:10px;color:#aaa;margin-bottom:4px}
-.pd-vital-val{font-size:22px;font-weight:500}
+.pd-vital-val{font-size:22px;font-weight:500;color:#D4537E}
 .pd-vital-abnormal{color:#D4537E}
 .pd-vital-normal{color:#1D9E75}
 .pd-vital-unit{font-size:9px;color:#ccc;margin-top:2px}
