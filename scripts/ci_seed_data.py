@@ -10,7 +10,7 @@ n = 1000
 cols = [
     "patient_id", "timestamp", "heart_rate", "systolic_bp", "diastolic_bp",
     "temperature", "spo2", "respiratory_rate", "lactate", "wbc",
-    "creatinine", "bilirubin", "platelet", "sepsis_label", "early_warning_label",
+    "creatinine", "bilirubin", "platelet", "sepsis_label",
 ]
 data = {
     "patient_id": [f"P{i:04d}" for i in range(1, n + 1)],
@@ -27,10 +27,9 @@ data = {
     "bilirubin":        np.random.exponential(0.8, n).clip(0.1, 20),
     "platelet":         np.random.normal(250, 80, n).clip(20, 600),
     "sepsis_label":     np.random.choice([0, 1], n, p=[0.85, 0.15]),
-    "early_warning_label": np.random.choice([0, 1, 2], n, p=[0.6, 0.25, 0.15]),
 }
 # Drop columns that don't exist in vital_records (Evidently compares schemas)
-df = pd.DataFrame(data, columns=cols).drop(columns=["sepsis_label", "early_warning_label"])
+df = pd.DataFrame(data, columns=cols).drop(columns=["sepsis_label"])
 df.to_parquet("data/processed/features_train.parquet", index=False)
 print(f"Created data/processed/features_train.parquet — {len(df)} rows, {len(df.columns)} cols [{', '.join(df.columns)}]")
 

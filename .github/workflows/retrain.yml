@@ -36,6 +36,9 @@ jobs:
           DATABASE_URL: postgresql+psycopg2://sepsis_user:sepsis_pass@localhost:5432/sepsis_db
         run: python scripts/ci_seed_data.py
 
+      - name: Generate training data
+        run: python -m data_pipeline.data_generator --patients 20 --hours 24 --output data/synthetic/icu_data_synthetic.csv
+
       - name: Run retrain flow
         env:
           MLFLOW_TRACKING_URI: http://localhost:5000
