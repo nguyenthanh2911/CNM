@@ -145,7 +145,7 @@ CNM/
 ├── test_vitals.json             # File JSON chứa dữ liệu mẫu dùng cho test
 │
 ├── artifacts/                   # Thư mục lưu các artifacts sinh ra
-│   └── preprocessor.joblib      # Pipeline tiền xử lý lưu ở định dạng joblib
+│   └── preprocessor_t6h.joblib  # Pipeline tiền xử lý lưu ở định dạng joblib
 │
 ├── data/                        # Tổ chức các loại dữ liệu
 │   ├── processed/               # Dữ liệu sau khi đã tiền xử lý, rút trích feature
@@ -420,13 +420,7 @@ docker compose exec -T ml_service python -m ml.train \
     --model-name "sepsis_xgboost_t6h" \
     --augment
 
-# Train model legacy (label tĩnh per-patient)
-docker compose exec -T ml_service python -m ml.train \
-    --data data/synthetic/icu_data_synthetic.csv \
-    --experiment-name "CNM-Sepsis" \
-    --model-name "sepsis_xgboost"
-
-# Cả hai đều tự động thêm label T+6h và log lên MLflow
+# Model sẽ tự động thêm label T+6h và log lên MLflow
 # Xem kết quả trên MLflow UI: http://localhost:5000
 ```
 
@@ -493,7 +487,7 @@ Raw Data (Synthetic ICU)             EarlyWarningPredictor
     sklearn Pipeline:                         │
     - SimpleImputer(strategy='median')        │
     - StandardScaler                          │
-    - Lưu: artifacts/preprocessor.joblib      │
+    - Lưu: artifacts/preprocessor_t6h.joblib  │
     │                                         │
     ├── (inference path: same Pipeline,       │
     │    load từ joblib, fallback fit-on-fly) │

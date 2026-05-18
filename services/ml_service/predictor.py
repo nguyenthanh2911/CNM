@@ -41,7 +41,7 @@ class SepsisPredictor:
 
     def __init__(self) -> None:
         # Keep default consistent with demo scripts and README.
-        self.model_name = os.getenv("MODEL_NAME", "sepsis_xgboost")
+        self.model_name = os.getenv("MODEL_NAME", "sepsis_xgboost_t6h")
         self.model_version = os.getenv("MODEL_VERSION", "unknown")
         self.model_auroc = float(os.getenv("MODEL_AUROC", "0.0"))
 
@@ -85,11 +85,11 @@ class SepsisPredictor:
         # Load sklearn Pipeline (imputer + scaler)
         try:
             preprocess_pipeline = joblib.load(
-                os.getenv("PREPROCESSOR_PATH", "artifacts/preprocessor.joblib")
+                os.getenv("PREPROCESSOR_PATH", "artifacts/preprocessor_t6h.joblib")
             )
             print("Loaded preprocessor pipeline OK")
         except FileNotFoundError:
-            print("WARNING: preprocessor.joblib not found, will use raw features")
+            print("WARNING: preprocessor_t6h.joblib not found, will use raw features")
             from sklearn.impute import SimpleImputer
             from sklearn.preprocessing import StandardScaler
             preprocess_pipeline = Pipeline([
