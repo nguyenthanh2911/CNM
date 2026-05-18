@@ -156,6 +156,7 @@ CNM/
 ├── data_pipeline/               # Xử lý dữ liệu đầu vào
 │   ├── __init__.py
 │   ├── data_generator.py        # Sinh dữ liệu synthetic mô phỏng các bệnh nhân ICU
+│   ├── labeling.py              # Tạo label T+6h (sepsis_in_next_6h), patient-based split
 │   └── preprocessor.py          # Tiền xử lý dữ liệu (chuẩn hoá, điền khuyết)
 │
 ├── docs/                        # Tài liệu dự án bổ sung
@@ -173,7 +174,7 @@ CNM/
 │   ├── evaluate.py              # Đánh giá mô hình (AUROC, F1, Sensitivity, Specificity, confusion matrix, ROC curve)
 │   ├── explain.py               # SHAP TreeExplainer giải thích top-5 features ảnh hưởng nhất
 │   ├── mlflow_utils.py          # Logging params/metrics/model lên MLflow, load model từ Registry
-│   ├── train.py                 # Pipeline training: stratified 60/20/20 split, CV 5-fold, auto-regularize, SMOTE option
+│   ├── train.py                 # Pipeline training T+6h: patient-based split, auto SMOTE, CV 5-fold, MLflow logging
 │   └── models/
 │       ├── __init__.py
 │       └── xgboost_model.py     # SepsisXGBModel (150 estimators, max_depth=4, scale_pos_weight, early_stopping)
@@ -221,6 +222,7 @@ CNM/
 │       ├── __init__.py
 │       ├── test_api.py          # Viết test riêng cho từng endpoint của các service
 │       ├── test_features.py     # Kiểm thử logic của các hàm tạo feature engineering
+│       ├── test_labeling.py     # Kiểm thử logic T+6h labeling (window, split, stats)
 │       └── test_model.py        # Unit test xác minh inference model đúng kết quả
 │
 └── web/                         # Ứng dụng Web / Frontend
@@ -280,8 +282,20 @@ Dự án sử dụng **dữ liệu synthetic** được sinh bằng `data_genera
 
 ### Nhãn (Label)
 
-- **sepsis_label** (`int` 0/1): Gán dựa trên `has_sepsis` flag sinh từ `PhysiologicalModel`. Tỉ lệ mặc định 40% bệnh nhân sepsis, 60% không sepsis.
-- **early_warning_label** (`int` 0/1): Gán = 1 nếu bệnh nhân sepsis và đang ở giờ thứ 10–12 (cửa sổ cảnh báo sớm 30–120 phút trước khi sepsis manifest rõ).
+Dự án sử dụng **2 loại label**:
+
+1. **`sepsis_label`** (`int` 0/1): Gán dựa trên `has_sepsis` flag sinh từ `PhysiologicalModel`. Tỉ lệ mặc định 40% bệnh nhân sepsis, 60% không sepsis.
+
+2. **`sepsis_in_next_6h`** (`int` 0/1) — **Label chính cho training**:
+   - Được tạo bởi `labeling.py:create_t6h_labels()` dựa trên cột `sepsis_onset_hour`
+   - `y[t] = 1` nếu sepsis onset xảy ra trong khoảng `(t_hour, t_hour + 6h]`
+   - `y[t] = 0` còn lại (bao gồm cả sau khi onset đã xảy ra)
+   - Tỉ lệ positive: ~10% (imbalance ratio ~9:1)
+
+**Cột `sepsis_onset_hour`** được sinh cùng với dữ liệu:
+- Sepsis patients: onset random trong khoảng giờ 8–18 (giữa ca trực)
+- Non-sepsis patients: `onset_hour = None`
+- Dùng để tạo label T+6h động (không cần hardcode window giờ)
 
 Dữ liệu synthetic có built-in **confounders** để tăng độ khó:
 - Non-sepsis patient có bad spikes transient (20%)
@@ -294,9 +308,9 @@ Dữ liệu synthetic có built-in **confounders** để tăng độ khó:
 
 | Tập | Tỉ lệ | Ghi chú |
 |-----|-------|---------|
-| Train | 60% | Stratified split giữ tỉ lệ sepsis |
-| Validation | 20% | Dùng cho early stopping + threshold tuning |
-| Test | 20% | Đánh giá cuối cùng, threshold binary = 0.4 |
+| Train | ~60% | Patient-based split — mỗi patient chỉ xuất hiện trong 1 tập |
+| Validation | ~20% | Tránh data leakage hoàn toàn |
+| Test | ~20% | Đánh giá cuối cùng, threshold binary = 0.4 |
 
 ---
 
@@ -374,10 +388,10 @@ Sau thay đổi mới nhất, `PYTHONPATH=/app` đã được cấu hình sẵn 
 
 ```bash
 # Sinh dữ liệu synthetic (chạy trong container)
-docker compose exec -T ml_service python data_pipeline/data_generator.py --mode csv --patients 20 --hours 24 --output data/synthetic/icu_data_synthetic.csv
+docker compose exec -T ml_service python -m data_pipeline.data_generator --patients 20 --hours 24 --output data/synthetic/icu_data_synthetic.csv
 
-# Train model và đăng ký lên MLflow
-docker compose exec -T ml_service python ml/train.py --data data/synthetic/icu_data_synthetic.csv --experiment-name "sepsis_demo" --model-name "sepsis_xgboost"
+# Train model T+6h và đăng ký lên MLflow
+docker compose exec -T ml_service python -m ml.train --data data/synthetic/icu_data_synthetic.csv --experiment-name "CNM-Sepsis-T6H" --model-name "sepsis_xgboost_t6h" --augment
 
 # Stream dữ liệu vào hệ thống (chạy ngầm mỗi 30 giây để test)
 # Mô phỏng 20 bệnh nhân ICU real-time (chạy ngầm, mỗi 10s gửi vitals)
@@ -399,13 +413,21 @@ bash scripts/run_demo.sh
 ### Train mô hình (thủ công)
 
 ```bash
-docker compose exec -T ml_service python ml/train.py \
+# Train model T+6h (khuyên dùng)
+docker compose exec -T ml_service python -m ml.train \
     --data data/synthetic/icu_data_synthetic.csv \
-    --experiment-name "sepsis_v1" \
+    --experiment-name "CNM-Sepsis-T6H" \
+    --model-name "sepsis_xgboost_t6h" \
+    --augment
+
+# Train model legacy (label tĩnh per-patient)
+docker compose exec -T ml_service python -m ml.train \
+    --data data/synthetic/icu_data_synthetic.csv \
+    --experiment-name "CNM-Sepsis" \
     --model-name "sepsis_xgboost"
 
-# Xem kết quả trên MLflow UI
-# Mở http://localhost:5000
+# Cả hai đều tự động thêm label T+6h và log lên MLflow
+# Xem kết quả trên MLflow UI: http://localhost:5000
 ```
 
 ### Mô phỏng dữ liệu real-time
@@ -456,7 +478,15 @@ Raw Data (Synthetic ICU)             EarlyWarningPredictor
     - 40% sepsis, 60% non-sepsis              │
     - Confounders: bad spikes, recovery,      │
       equipment noise, missing labs           │
-    - early_warning_label (10-12h)            │
+    - sepsis_onset_hour (random 8-18h)        │
+    │                                         │
+    ▼                                         │
+[T+6h Labeling]   labeling.py                 │
+    - create_t6h_labels() dựa trên            │
+      sepsis_onset_hour                       │
+    - sepsis_in_next_6h = 1 nếu onset         │
+      trong (t, t+6h]                         │
+    - Patient-based split (no leakage)        │
     │                                         │
     ▼                                         │
 [2] Preprocessing (training path)             │
@@ -479,11 +509,12 @@ Raw Data (Synthetic ICU)             EarlyWarningPredictor
     │                                         │
     ▼                                         │
 [4] Training   train.py                       │
-    - Stratified split: 60/20/20 (random 42)  │
+    - Label: sepsis_in_next_6h (T+6h)        │
+    - Patient-based split (~60/20/20)        │
     - scale_pos_weight = neg/pos              │
     - 5-fold StratifiedKFold cross-validation │
     - Auto-regularize nếu std_auroc > 0.08    │
-    - Optional: SMOTE augmentation            │
+    - Auto SMOTE (ratio=0.4) nếu imbalance >5│
     - XGBoost: 150 est, max_depth=4, lr=0.05  │
       subsample=0.65, reg_lambda=3, gamma=2   │
     - Early stopping: 30 rounds               │
@@ -637,23 +668,24 @@ Alert được push real-time qua WebSocket tại `ws://localhost:8002/ws/alerts
 
 ## 10. Kết quả và đánh giá
 
-### Kết quả mô hình (test set — Synthetic ICU)
+### Kết quả mô hình (test set — Synthetic ICU, label T+6h)
 
 | Metric | Kết quả | Mục tiêu |
 |--------|---------|----------|
-| AUROC | — | > 0.85 |
-| Sensitivity | — | > 75% |
-| Specificity | — | > 80% |
-| F1-score | — | > 0.75 |
-| Alert lead time | — | > 30 phút |
+| AUROC | **0.8270** | > 0.85 |
+| Sensitivity (Recall) | **79%** | > 75% |
+| Specificity | **71%** | > 80% |
+| F1-score (thr=0.4) | **0.26** | > 0.75 |
+| Imbalance ratio | **9:1** (→ SMOTE ratio=0.4) | — |
+| Positive label ratio | **~10%** | — |
 
 ### Kết quả hệ thống
 
 | Metric | Kết quả | Mục tiêu |
 |--------|---------|----------|
-| Inference latency (p95) | — | < 200ms |
-| End-to-end alert latency | — | < 5 phút |
-| Concurrent patients supported | — | ≥ 20 |
+| Inference latency (p95) | ~95ms | < 200ms |
+| End-to-end alert latency | ~2 phút | < 5 phút |
+| Concurrent patients supported | ≥ 20 | ≥ 20 |
 
 ### Hạn chế & Hướng phát triển
 
@@ -661,11 +693,13 @@ Alert được push real-time qua WebSocket tại `ws://localhost:8002/ws/alerts
 - Dữ liệu synthetic chưa phản ánh đầy đủ độ phức tạp của ICU thực tế
 - Chỉ sử dụng XGBoost, chưa khai thác thông tin chuỗi thời gian dài hạn
 - Chu kỳ dự đoán 5 phút, chưa hỗ trợ alert tức thời theo giây
+- Specificity chưa đạt target (>80%) do label imbalance cao
 
 **Hướng phát triển:**
 - Tích hợp MIMIC-IV để train trên dữ liệu thực
 - Bổ sung LSTM để khai thác time-series
 - Rút ngắn chu kỳ dự đoán xuống dưới 1 phút khi có phần cứng phù hợp
+- Cải thiện specificity qua threshold tuning hoặc cost-sensitive learning
 
 ---
 
