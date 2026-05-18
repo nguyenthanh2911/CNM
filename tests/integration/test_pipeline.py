@@ -111,3 +111,53 @@ class TestGeneratorDataframe:
         assert df["heart_rate"].between(20, 250).all(), "heart_rate out of range"
         assert df["spo2"].between(50, 100).all(), "spo2 out of range"
         assert df["temperature"].between(30, 45).all(), "temperature out of range"
+
+
+# ---------------------------------------------------------------------------
+# TestT6HLabelingIntegration
+# ---------------------------------------------------------------------------
+
+class TestT6HLabelingIntegration:
+    """Integration test: data_generator → create_t6h_labels → split_by_patient."""
+
+    @pytest.fixture(scope="class")
+    def t6h_data(self):
+        from data_pipeline.data_generator import ICUSepsisGenerator
+        from data_pipeline.labeling import create_t6h_labels, split_by_patient
+
+        gen = ICUSepsisGenerator(n_patients=10, hours=24, interval_minutes=5)
+        df_raw = gen.generate_dataframe()
+        df_labeled = create_t6h_labels(df_raw)
+        train, val, test = split_by_patient(df_labeled)
+        return df_labeled, train, val, test
+
+    def test_label_col_exists(self, t6h_data):
+        from data_pipeline.labeling import LABEL_COL_T6H
+        df_labeled = t6h_data[0]
+        assert LABEL_COL_T6H in df_labeled.columns
+
+    def test_has_positive_labels(self, t6h_data):
+        from data_pipeline.labeling import LABEL_COL_T6H
+        df_labeled = t6h_data[0]
+        assert df_labeled[LABEL_COL_T6H].sum() > 0
+
+    def test_no_leakage_train_val(self, t6h_data):
+        _, train, val, _ = t6h_data
+        overlap = set(train["patient_id"]) & set(val["patient_id"])
+        assert len(overlap) == 0
+
+    def test_no_leakage_train_test(self, t6h_data):
+        _, train, _, test = t6h_data
+        overlap = set(train["patient_id"]) & set(test["patient_id"])
+        assert len(overlap) == 0
+
+    def test_all_rows_covered(self, t6h_data):
+        df_labeled, train, val, test = t6h_data
+        total = len(train) + len(val) + len(test)
+        assert total == len(df_labeled)
+
+    def test_label_binary_values(self, t6h_data):
+        from data_pipeline.labeling import LABEL_COL_T6H
+        df_labeled = t6h_data[0]
+        unique = set(df_labeled[LABEL_COL_T6H].unique())
+        assert unique.issubset({0, 1})

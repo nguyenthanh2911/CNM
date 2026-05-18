@@ -292,7 +292,7 @@ class ICUSepsisGenerator:
             # Sepsis onset: random trong khoảng giờ 8–18 (giữa ca trực)
             # Non-sepsis patients: onset_hour = None
             onset_hour: Optional[int] = None
-            if has_sepsis:
+            if has_sepsis and self.hours > 8:
                 onset_hour = int(np.random.randint(8, min(19, self.hours)))
 
             self._patients[patient_id] = PhysiologicalModel(
