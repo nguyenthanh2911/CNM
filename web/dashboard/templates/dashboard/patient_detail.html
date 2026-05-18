@@ -43,11 +43,15 @@
             {{ risk_level }}
           </span>
         </div>
+        <div class="pd-risk-horizon">
+          <span class="pd-horizon-pill">⏱ Dự đoán T+6h</span>
+        </div>
       </div>
 
       <!-- Early Warning Card -->
-      {% if early_warning %}
-      <div id="ew-banner" class="pd-ew-card">
+      {% if early_warning %}Nguy cơ Sepsis — 6h tới
+        </div>
+        <div class="pd-ew-desc">Xác suất khởi phát trong 6 giờ tớiiv id="ew-banner" class="pd-ew-card">
         <div class="pd-ew-title">
           <span class="pd-ew-dot"></span> Cảnh báo sớm
         </div>
@@ -85,29 +89,33 @@
       <!-- Vitals Grid (5 cards) -->
       <div class="pd-vitals-grid">
         <div class="pd-vital-card">
-          <div class="pd-vital-label">Heart Rate</div>
-          <div id="v-hr" class="pd-vital-val pd-vital-abnormal">{{ vitals.heart_rate|default:"-" }}</div>
+          <div class="pd-vital-label">Heart R{% if vitals.heart_rate and vitals.heart_rate > 100 %}pd-vital-abnormal{% elif vitals.heart_rate %}pd-vital-normal{% endif %}">
+            {{ vitals.heart_rate|default:"-" }}</div>
           <div class="pd-vital-unit">bpm</div>
         </div>
         <div class="pd-vital-card">
           <div class="pd-vital-label">Blood Pressure</div>
-          <div id="v-bp" class="pd-vital-val pd-vital-abnormal">
+          <div id="v-bp" class="pd-vital-val {% if vitals.systolic_bp and vitals.systolic_bp < 90 %}pd-vital-abnormal{% elif vitals.systolic_bp %}pd-vital-normal{% endif %}">
             {{ vitals.systolic_bp|default:"-" }} / {{ vitals.diastolic_bp|default:"-" }}
           </div>
           <div class="pd-vital-unit">mmHg</div>
         </div>
         <div class="pd-vital-card">
           <div class="pd-vital-label">SpO2</div>
-          <div id="v-spo2" class="pd-vital-val pd-vital-abnormal">{{ vitals.spo2|default:"-" }}</div>
+          <div id="v-spo2" class="pd-vital-val {% if vitals.spo2 and vitals.spo2 < 94 %}pd-vital-abnormal{% elif vitals.spo2 %}pd-vital-normal{% endif %}">
+            {{ vitals.spo2|default:"-" }}</div>
           <div class="pd-vital-unit">%</div>
         </div>
         <div class="pd-vital-card">
           <div class="pd-vital-label">Temperature</div>
-          <div id="v-temp" class="pd-vital-val pd-vital-abnormal">{{ vitals.temperature|default:"-" }}</div>
+          <div id="v-temp" class="pd-vital-val {% if vitals.temperature and vitals.temperature > 38.3 %}pd-vital-abnormal{% elif vitals.temperature %}pd-vital-normal{% endif %}">
+            {{ vitals.temperature|default:"-" }}</div>
           <div class="pd-vital-unit">°C</div>
         </div>
         <div class="pd-vital-card">
           <div class="pd-vital-label">Resp. Rate</div>
+          <div id="v-rr" class="pd-vital-val {% if vitals.respiratory_rate and vitals.respiratory_rate > 20 %}pd-vital-abnormal{% elif vitals.respiratory_rate %}pd-vital-normal{% endif %}">
+            
           <div id="v-rr" class="pd-vital-val pd-vital-abnormal">{{ vitals.respiratory_rate|default:"-" }}</div>
           <div class="pd-vital-unit">/min</div>
         </div>
@@ -229,6 +237,22 @@
 .pd-chart-title{font-size:11px;font-weight:500;color:#999;margin-bottom:10px}
 .pd-no-shap{font-size:11px;color:#ccc;margin-top:8px}
 
+
+/* ── T+6h horizon pill ──────────────────── */
+.pd-risk-horizon{margin-top:10px}
+.pd-horizon-pill{display:inline-flex;align-items:center;gap:4px;
+  font-size:10px;padding:3px 10px;border-radius:20px;font-weight:500;
+  background:linear-gradient(135deg,rgba(127,119,221,.12),rgba(212,83,126,.08));
+  color:#7F77DD;border:0.5px solid rgba(127,119,221,.2)}
+
+/* ── EW desc ────────────────────────────── */
+.pd-ew-desc{font-size:10px;color:#bbb;margin-bottom:8px;margin-top:-4px}
+
+/* ── Vitals dynamic color update via JS ─── */
+.pd-vital-val.pd-vital-warn{color:#EF9F27}
+
+/* ── blink-dot (dùng ở timestamp) ──────── */
+@keyframes blink-dot{0%,100%{opacity:1}50%{opacity:.2}}
 /* ── Timestamp ──────────────────────────── */
 .pd-timestamp{font-size:11px;color:#bbb;display:flex;align-items:center;gap:6px}
 .pd-timestamp::before{content:'';display:inline-block;width:6px;height:6px;
@@ -338,18 +362,26 @@ async function fetchLatest(){
     const news2 = document.getElementById('news2-badge');
     if(sofa)  sofa.textContent  = 'SOFA: '  + d.sofa_score;
     if(news2) news2.textContent = 'NEWS2: ' + d.news2_score;
-
-    /* Early Warning */
-    const ew = d.early_warning || {};
-    const ewBanner = document.getElementById('ew-banner');
-    if(ewBanner){
-      const lvl = ew.early_warning_level || 'LOW';
-      ewBanner.className = 'pd-ew-card ' +
-        (lvl==='HIGH' ? 'pd-ew-high' : lvl==='MEDIUM' ? 'pd-ew-medium' : 'pd-ew-low');
+— cập nhật giá trị + màu động theo ngưỡng */
+    const vitalRules = [
+      { id:'v-hr',   val:d.heart_rate,         abnormal: v => v > 100 },
+      { id:'v-spo2', val:d.spo2,               abnormal: v => v < 94  },
+      { id:'v-temp', val:d.temperature,        abnormal: v => v > 38.3 },
+      { id:'v-rr',   val:d.respiratory_rate,   abnormal: v => v > 20  },
+    ];
+    for(const r of vitalRules){
+      const el = document.getElementById(r.id);
+      if(!el || r.val === undefined || r.val === null) continue;
+      el.textContent = typeof r.val === 'number' ? r.val.toFixed(1) : r.val;
+      el.className = 'pd-vital-val ' +
+        (r.abnormal(r.val) ? 'pd-vital-abnormal' : 'pd-vital-normal');
     }
-    const setEW = (id, barId, barClass, val) => {
-      const el = document.getElementById(id);
-      const bar = document.getElementById(barId);
+    /* BP riêng vì 2 giá trị */
+    const bpEl = document.getElementById('v-bp');
+    if(bpEl && d.systolic_bp !== undefined){
+      bpEl.textContent = (d.systolic_bp?.toFixed(1)||'-') + ' / ' + (d.diastolic_bp?.toFixed(1)||'-');
+      bpEl.className = 'pd-vital-val ' +
+        (d.systolic_bp < 90 ? 'pd-vital-abnormal' : 'pd-vital-normal')
       const pct = Math.round((val||0)*100);
       if(el)  el.textContent = pct;
       if(bar) bar.style.width = pct + '%';
