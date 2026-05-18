@@ -54,7 +54,6 @@ def _make_df(
                 "bilirubin": float(np.random.uniform(0.1, 3.0)),
                 "platelet": float(np.random.uniform(80, 400)),
                 "sepsis_label": int(has_sepsis),
-                "early_warning_label": 0,
                 "sepsis_onset_hour": float(onset) if onset is not None else float("nan"),
             })
 
